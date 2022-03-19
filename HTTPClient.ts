@@ -236,11 +236,11 @@ class HTTPClient {
 				}
 			}
 
-			if (response.statusCode != 200) {
+			if (response.statusCode == 301 || response.statusCode == 302) {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
 
-				if ((response.statusCode == 301 || response.statusCode == 302) && response.headers.location) {
+				if (response.headers.location) {
 					value.onStart = () => {}
 					value.url = new urlModule.URL(response.headers.location)
 					this.queue.push(value)
@@ -248,7 +248,7 @@ class HTTPClient {
 					this.work()
 				} else {
 					this.work()
-					value.reject('Status code from server is ' + response.statusCode)
+					value.reject({response: response.statusCode, body: null, message: 'Server returned ' + response.statusCode})
 				}
 
 				return
@@ -297,7 +297,7 @@ class HTTPClient {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
 				this.work()
-				value.reject('Socket termination error')
+				value.reject({response: null, body: null, message: 'Socket termination error'})
 			})
 
 			response.on('end', () => {
@@ -326,7 +326,12 @@ class HTTPClient {
 				memcache = []
 
 				finished = true
-				value.resolve(newbuff)
+
+				if (response.statusCode == 200 || response.statusCode == 206) {
+					value.resolve(newbuff)
+				} else {
+					value.reject({response: response.statusCode, body: newbuff, message: 'Server returned ' + response.statusCode})
+				}
 			})
 		}
 
