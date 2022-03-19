@@ -213,6 +213,8 @@ class HTTPClient {
 			method: value.method,
 			headers: {
 				'User-Agent': 'Mozilla/5.0 (Compatible; ArchiveBot) WikiComma/universal',
+				'Connection': 'keep-alive',
+				'Accept': '*/*'
 			}
 		}
 
@@ -229,6 +231,8 @@ class HTTPClient {
 		this.workingConnections++
 		this.working = this.workingConnections != 0
 
+		let finished = false
+
 		const callback = (response: http.IncomingMessage) => {
 			if (response.headers['set-cookie']) {
 				for (const cookie of response.headers['set-cookie']) {
@@ -241,8 +245,11 @@ class HTTPClient {
 				this.working = this.workingConnections != 0
 
 				if (response.headers.location) {
+					// redirect, it might also switch protocols
 					value.onStart = () => {}
 					value.url = new urlModule.URL(response.headers.location)
+					value.https = value.url.protocol == 'https:'
+					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.queue.push(value)
 
 					this.work()
@@ -258,7 +265,6 @@ class HTTPClient {
 				value.onStart(response)
 			}
 
-			let finished = false
 			let memcache: Buffer[] = []
 
 			response.on('data', (chunk: Buffer) => {
@@ -272,6 +278,7 @@ class HTTPClient {
 				value.reject(err)
 			})
 
+			/*
 			response.socket.setMaxListeners(50000)
 
 			response.socket.once('error', (err) => {
@@ -299,6 +306,7 @@ class HTTPClient {
 				this.work()
 				value.reject({response: null, body: null, message: 'Socket termination error'})
 			})
+			*/
 
 			response.on('end', () => {
 				this.workingConnections--
@@ -340,6 +348,17 @@ class HTTPClient {
 		if (value.body != undefined) {
 			request.write(value.body)
 		}
+
+		request.once('error', (err) => {
+			if (finished) {
+				return
+			}
+
+			this.workingConnections--
+			this.working = this.workingConnections != 0
+			this.work()
+			value.reject(err)
+		})
 
 		request.end()
 	}
