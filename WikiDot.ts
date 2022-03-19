@@ -4,6 +4,7 @@ import { HTTPClient } from './HTTPClient'
 import { parse, HTMLElement } from 'node-html-parser'
 import { promises } from 'fs'
 import { promisify } from 'util'
+import { unescape } from 'html-escaper'
 
 const sleep = promisify(setTimeout)
 
@@ -27,12 +28,13 @@ interface PageMeta {
 	last_revision: number
 	global_last_revision: number
 	revisions: PageRevision[]
-	fetched_revisions: number[]
 }
 
 interface GenericPageData {
 	page_id?: number
 }
+
+const nbspMatch = /&nbsp;/g
 
 class WikiDot {
 	public static normalizeName(name: string): string {
@@ -40,6 +42,7 @@ class WikiDot {
 	}
 
 	private static usernameMatcher = /user:info\/(.*)/
+	public static defaultPagenation = 20
 
 	public client = new HTTPClient()
 	private ajaxURL: URL
@@ -80,7 +83,7 @@ class WikiDot {
 	}
 
 	// low-level api
-	public async fetchChanges(page = 1, perPage = 20) {
+	public async fetchChanges(page = 1, perPage = WikiDot.defaultPagenation) {
 		const listing: RecentChange[] = []
 
 		const json = await this.fetchJson({
@@ -91,7 +94,7 @@ class WikiDot {
 		})
 
 		if (json.status != 'ok') {
-			throw Error("Server returned: " + JSON.stringify(json))
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
 		}
 
 		const html = parse(json.body)
@@ -119,7 +122,7 @@ class WikiDot {
 		return listing
 	}
 
-	public async fetchPageChangeList(page_id: number, page = 1, perPage = 20) {
+	public async fetchPageChangeList(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
 		const listing: PageRevision[] = []
 
 		const json = await this.fetchJson({
@@ -131,7 +134,7 @@ class WikiDot {
 		})
 
 		if (json.status != 'ok') {
-			throw Error("Server returned: " + JSON.stringify(json))
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
 		}
 
 		const html = parse(json.body)
@@ -179,7 +182,7 @@ class WikiDot {
 				global_revision: parseGlobalRev,
 				author: author != null ? author[1] : undefined,
 				stamp: parseTime != null && !isNaN(parseTime) ? parseTime : undefined,
-				flags: flags,
+				flags: flags.replace(/\s+/g, ' '),
 				commentary: commentary
 			}
 
@@ -198,7 +201,7 @@ class WikiDot {
 			const data = await this.fetchPageChangeList(page_id, ++page)
 			listing.push(...data)
 
-			if (data.length < 20) {
+			if (data.length < WikiDot.defaultPagenation) {
 				break
 			}
 		}
@@ -224,7 +227,7 @@ class WikiDot {
 				listing.push(piece)
 			}
 
-			if (data.length < 20 || finish) {
+			if (data.length < WikiDot.defaultPagenation || finish) {
 				break
 			}
 		}
@@ -248,6 +251,22 @@ class WikiDot {
 		return meta
 	}
 
+	public async fetchRevision(revision_id: number) {
+		const json = await this.fetchJson({
+			"revision_id": revision_id,
+			"moduleName": "history/PageSourceModule",
+		})
+
+		if (json.status != 'ok') {
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
+		}
+
+		const html = parse(json.body)
+		const div = html.querySelector('div.page-source')
+
+		return div != undefined ? unescape(div.innerText).replace(nbspMatch, ' ') : ''
+	}
+
 	// high-level api
 	public async cachePageMetadata() {
 		let page = 0
@@ -262,7 +281,7 @@ class WikiDot {
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
-						const metadata = await this.locadPageMetadata(change.name)
+						let metadata = await this.loadPageMetadata(change.name)
 
 						if (metadata == null || metadata.last_revision < change.revision) {
 							this.log(`Need to renew ${change.name}`)
@@ -271,7 +290,6 @@ class WikiDot {
 								name: change.name,
 								revisions: [],
 								last_revision: change.revision,
-								fetched_revisions: metadata != null ? metadata.fetched_revisions : [],
 								global_last_revision: metadata != null ? metadata.global_last_revision : 0
 							}
 
@@ -336,18 +354,53 @@ class WikiDot {
 									await this.writePageMetadata(change.name, newMeta)
 								}
 							}
+
+							metadata = newMeta
+						}
+
+						for (const key in metadata.revisions) {
+							const rev = metadata.revisions[key]
+
+							if (!await this.revisionExists(change.name, rev.revision)) {
+								while (true) {
+									try {
+										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
+										const body = await this.fetchRevision(rev.global_revision)
+										await this.writeRevision(change.name, rev.revision, body)
+										break
+									} catch(err) {
+										this.log(`Encountered ${err}, sleeping for 10 seconds`)
+										await sleep(10_000)
+									}
+								}
+							}
 						}
 					}
 				}
 			}
 
-			if (changes.length < 20) {
+			if (changes.length < 20 || true) {
 				break
 			}
 		}
 	}
 
-	public async locadPageMetadata(page: string) {
+	// local I/O
+	public async revisionExists(page: string, revision: number) {
+		try {
+			await promises.stat(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
+			return true
+		} catch(err) {
+			return false
+		}
+	}
+
+	public async writeRevision(page: string, revision: number, body: string) {
+		await promises.mkdir(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+		await promises.writeFile(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`, body)
+	}
+
+	public async loadPageMetadata(page: string) {
 		try {
 			const read = await promises.readFile(`./storage/${this.name}/meta/pages/${WikiDot.normalizeName(page)}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as PageMeta
