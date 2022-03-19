@@ -37,6 +37,18 @@ interface GenericPageData {
 	rating?: number
 }
 
+interface FileMeta {
+	file_id: number
+	name: string
+	url: string
+	size: string
+	size_bytes: number
+	mime: string
+	content: string
+	author: string | null
+	stamp: number
+}
+
 class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -126,6 +138,8 @@ class WikiDot {
 		return listing
 	}
 
+	private static dateMatcher = /time_([0-9]+)/
+
 	public async fetchPageChangeList(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
 		const listing: PageRevision[] = []
 
@@ -169,7 +183,7 @@ class WikiDot {
 			}
 
 			const author = (values[4] as HTMLElement)?.querySelector('a')?.attrs['href']?.match(WikiDot.usernameMatcher)
-			const time = values[5].querySelector('span')?.attrs['class']?.match(/time_([0-9]+)/)
+			const time = values[5].querySelector('span')?.attrs['class']?.match(WikiDot.dateMatcher)
 			const commentary = values[6].innerHTML.trim()
 
 			const parseRev = parseInt(revision[1])
@@ -281,7 +295,56 @@ class WikiDot {
 	private downloadingFiles = new Map<string, boolean>()
 	private static localFileMatch = /\/local--files\/(.+)/i
 
-	public async fetchFilesFrom(body: string) {
+	public async fetchAndWriteFilesMeta(page_id: number) {
+		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
+			await this.writeFileMeta(fileMeta.url.match(WikiDot.localFileMatch)![1], fileMeta)
+		}
+	}
+
+	public async fetchFilesFor(page_id: number) {
+		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
+			const match = fileMeta.url.match(WikiDot.localFileMatch)!
+			await this.writeFileMeta(match[1], fileMeta)
+
+			if (match != null) {
+				if (this.downloadingFiles.has(match[1])) {
+					continue
+				}
+
+				this.downloadingFiles.set(match[1], true)
+
+				const split = match[1].split('/')
+
+				for (const key in split) {
+					split[key] = encodeURIComponent(split[key])
+				}
+
+				if (split.length == 1) {
+					split.unshift('~')
+				}
+
+				const last = split.splice(split.length - 1)[0]
+
+				try {
+					await promises.stat(`./storage/${this.name}/files/${split.join('/')}/${last}`)
+					break
+				} catch(err) {
+
+				}
+
+				this.log(`Fetching file ${fileMeta.url}`)
+
+				this.client.get(fileMeta.url).then(async buffer => {
+					await promises.mkdir(`./storage/${this.name}/files/${split.join('/')}`, {recursive: true})
+					await promises.writeFile(`./storage/${this.name}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
+				}).catch(err => {
+					this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
+				})
+			}
+		}
+	}
+
+	public async fetchFilesFrom(body: string, page_id?: number) {
 		const urls = body.match(WikiDot.urlMatcher)
 
 		if (urls == null) {
@@ -322,8 +385,85 @@ class WikiDot {
 		return true
 	}
 
+	private static fileSizeMatcher = /([0-9]+) bytes/i
+
+	public async fetchFileMeta(file_id: number): Promise<FileMeta> {
+		this.log(`Fetching file meta of ${file_id}`)
+
+		const json = await this.fetchJson({
+			"file_id": file_id,
+			"moduleName": "files/FileInformationWinModule",
+		})
+
+		if (json.status != 'ok') {
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
+		}
+
+		const html = parse(json.body)
+		const rows = html.querySelectorAll('tr')
+
+		const name = rows[0].querySelectorAll('td')[1]
+		const fullURL = rows[1].querySelectorAll('td')[1]
+		const size = rows[2].querySelectorAll('td')[1]
+		const mime = rows[3].querySelectorAll('td')[1]
+		const contentType = rows[4].querySelectorAll('td')[1]
+		const uploader = rows[5].querySelectorAll('td')[1]
+		const date = rows[6].querySelectorAll('td')[1]
+
+		const matchAuthor = uploader.querySelector('a')?.attrs['href'].match(WikiDot.usernameMatcher)![1]!
+
+		return {
+			file_id: file_id,
+			name: name.innerText.trim(),
+			url: fullURL.querySelector('a')?.attrs['href']!,
+			size: size.innerText.trim(),
+			size_bytes: parseInt(size.innerText.match(WikiDot.fileSizeMatcher)![1]),
+			mime: mime.innerText.trim(),
+			content: contentType.innerText.trim(),
+			author: matchAuthor ? matchAuthor : null,
+			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!)
+		}
+	}
+
+	private static fileIdMatcher = /file-row-([0-9]+)/i
+
+	public async fetchFileList(page_id: number) {
+		const json = await this.fetchJson({
+			"page_id": page_id,
+			"moduleName": "files/PageFilesModule",
+		})
+
+		if (json.status != 'ok') {
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
+		}
+
+		const html = parse(json.body)
+
+		const list = []
+
+		for (const elem of html.querySelectorAll('tr')) {
+			const id = elem.attrs['id']?.match(WikiDot.fileIdMatcher)
+
+			if (id != null) {
+				list.push(parseInt(id[1]))
+			}
+		}
+
+		return list
+	}
+
+	public async fetchFileMetaList(page_id: number) {
+		const list = []
+
+		for (const file_id of await this.fetchFileList(page_id)) {
+			list.push(await this.fetchFileMeta(file_id))
+		}
+
+		return list
+	}
+
 	public async cachePageMetadata() {
-		let page = 0
+		let page = 10
 		const seen = new Map<string, boolean>()
 
 		while (true) {
@@ -419,16 +559,23 @@ class WikiDot {
 							metadata = newMeta
 						}
 
+						let fetchFilesOnce = false
+
 						for (const key in metadata.revisions) {
 							const rev = metadata.revisions[key]
 
 							if (!await this.revisionExists(change.name, rev.revision)) {
+								if (!fetchFilesOnce && metadata.page_id != undefined) {
+									fetchFilesOnce = true
+									this.fetchFilesFor(metadata.page_id)
+								}
+
 								while (true) {
 									try {
 										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
 										const body = await this.fetchRevision(rev.global_revision)
 										await this.writeRevision(change.name, rev.revision, body)
-										this.fetchFilesFrom(body)
+										// this.fetchFilesFrom(body, metadata.page_id)
 										break
 									} catch(err) {
 										this.log(`Encountered ${err}, sleeping for 10 seconds`)
@@ -441,7 +588,7 @@ class WikiDot {
 				}
 			}
 
-			if (changes.length < 20 || true) {
+			if (changes.length < 20) {
 				break
 			}
 		}
@@ -474,6 +621,32 @@ class WikiDot {
 	public async writePageMetadata(page: string, meta: PageMeta) {
 		await promises.mkdir(`./storage/${this.name}/meta/pages`, {recursive: true})
 		await promises.writeFile(`./storage/${this.name}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
+	}
+
+	public async readFileMeta(path: string) {
+		try {
+			const read = await promises.readFile(`./storage/${this.name}/meta/files/${path}`, {encoding: 'utf-8'})
+			return JSON.parse(read) as FileMeta
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeFileMeta(path: string, meta: FileMeta) {
+		const split = path.split('/')
+
+		for (const key in split) {
+			split[key] = encodeURIComponent(split[key])
+		}
+
+		if (split.length == 1) {
+			split.unshift('~')
+		}
+
+		const last = split.splice(split.length - 1)[0]
+
+		await promises.mkdir(`./storage/${this.name}/meta/files/${split.join('/')}`, {recursive: true})
+		await promises.writeFile(`./storage/${this.name}/meta/files/${split.join('/')}/${last}.json`, JSON.stringify(meta, null, 4))
 	}
 }
 
