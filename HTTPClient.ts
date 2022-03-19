@@ -62,6 +62,16 @@ class HTTPCookie {
 	}
 }
 
+class HTTPError {
+	constructor(public response: number | undefined, public body: string | Buffer | null, public message: string | null) {
+
+	}
+
+	public toString() {
+		return `HTTPError[response: ${this.response}; body: ${this.body}; message: ${this.message}]`
+	}
+}
+
 class CookieJar {
 	public cookies: HTTPCookie[] = []
 
@@ -255,7 +265,7 @@ class HTTPClient {
 					this.work()
 				} else {
 					this.work()
-					value.reject({response: response.statusCode, body: null, message: 'Server returned ' + response.statusCode})
+					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
 				}
 
 				return
@@ -338,7 +348,7 @@ class HTTPClient {
 				if (response.statusCode == 200 || response.statusCode == 206) {
 					value.resolve(newbuff)
 				} else {
-					value.reject({response: response.statusCode, body: newbuff, message: 'Server returned ' + response.statusCode})
+					value.reject(new HTTPError(response.statusCode, newbuff, 'Server returned ' + response.statusCode))
 				}
 			})
 		}

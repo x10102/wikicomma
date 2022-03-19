@@ -49,6 +49,33 @@ interface FileMeta {
 	stamp: number
 }
 
+/**
+ * All symbols are safe for storing on disk except these
+ * (Windows NT kernel limitations)
+ */
+const reencoding_table = [
+	[/\\/g, encodeURIComponent('\\')],
+	[/:/g, encodeURIComponent(':')],
+	[/\*/g, encodeURIComponent('*')],
+	[/\?/g, encodeURIComponent('?')],
+	[/"/g, encodeURIComponent('"')],
+	[/</g, encodeURIComponent('<')],
+	[/>/g, encodeURIComponent('>')],
+	[/\|/g, encodeURIComponent('|')],
+]
+
+function reencodeComponent(str: string) {
+	str = decodeURIComponent(str)
+
+	for (const [a, b] of reencoding_table) {
+		str = str.replace(a, b as string)
+	}
+
+	return str
+}
+
+export {reencodeComponent}
+
 class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -316,7 +343,7 @@ class WikiDot {
 				const split = match[1].split('/')
 
 				for (const key in split) {
-					split[key] = encodeURIComponent(split[key])
+					split[key] = reencodeComponent(split[key])
 				}
 
 				if (split.length == 1) {
@@ -463,7 +490,7 @@ class WikiDot {
 	}
 
 	public async cachePageMetadata() {
-		let page = 10
+		let page = 171
 		const seen = new Map<string, boolean>()
 
 		while (true) {
@@ -471,7 +498,7 @@ class WikiDot {
 			const changes = await this.fetchChanges(++page)
 
 			for (const change of changes) {
-				if (!seen.has(change.name)) {
+				if (!seen.has(change.name) && !change.name.startsWith('nav:')) {
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
@@ -496,8 +523,8 @@ class WikiDot {
 									pageMeta = await this.fetchGeneric(change.name)
 									break
 								} catch(err) {
-									this.log(`Encountered ${err}, sleeping for 10 seconds`)
-									await sleep(10_000)
+									this.log(`Encountered ${err}, sleeping for 60 seconds`)
+									await sleep(60_000)
 								}
 							}
 
@@ -515,8 +542,8 @@ class WikiDot {
 											changes = await this.fetchPageChangeListAll(pageMeta.page_id)
 											break
 										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 10 seconds`)
-											await sleep(10_000)
+											this.log(`Encountered ${err}, sleeping for 60 seconds`)
+											await sleep(60_000)
 										}
 									}
 
@@ -539,8 +566,8 @@ class WikiDot {
 											changes = await this.fetchPageChangeListAllUntil(pageMeta.page_id, metadata.last_revision)
 											break
 										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 10 seconds`)
-											await sleep(10_000)
+											this.log(`Encountered ${err}, sleeping for 60 seconds`)
+											await sleep(60_000)
 										}
 									}
 
@@ -578,8 +605,8 @@ class WikiDot {
 										// this.fetchFilesFrom(body, metadata.page_id)
 										break
 									} catch(err) {
-										this.log(`Encountered ${err}, sleeping for 10 seconds`)
-										await sleep(10_000)
+										this.log(`Encountered ${err}, sleeping for 60 seconds`)
+										await sleep(60_000)
 									}
 								}
 							}
@@ -636,7 +663,7 @@ class WikiDot {
 		const split = path.split('/')
 
 		for (const key in split) {
-			split[key] = encodeURIComponent(split[key])
+			split[key] = reencodeComponent(split[key])
 		}
 
 		if (split.length == 1) {
