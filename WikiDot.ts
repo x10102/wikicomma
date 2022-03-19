@@ -25,6 +25,8 @@ interface PageRevision {
 
 interface PageMeta {
 	name: string
+	page_id?: number
+	rating?: number
 	last_revision: number
 	global_last_revision: number
 	revisions: PageRevision[]
@@ -32,6 +34,7 @@ interface PageMeta {
 
 interface GenericPageData {
 	page_id?: number
+	rating?: number
 }
 
 const nbspMatch = /&nbsp;/g
@@ -183,7 +186,7 @@ class WikiDot {
 				author: author != null ? author[1] : undefined,
 				stamp: parseTime != null && !isNaN(parseTime) ? parseTime : undefined,
 				flags: flags.replace(/\s+/g, ' '),
-				commentary: commentary
+				commentary: unescape(commentary)
 			}
 
 			listing.push(obj)
@@ -248,6 +251,12 @@ class WikiDot {
 			}
 		}
 
+		const ratingElem = html.querySelector('span.rate-points')?.querySelector('span.number')?.innerText
+
+		if (ratingElem != undefined) {
+			meta.rating = parseInt(ratingElem)
+		}
+
 		return meta
 	}
 
@@ -289,6 +298,8 @@ class WikiDot {
 							const newMeta: PageMeta = {
 								name: change.name,
 								revisions: [],
+								rating: metadata != null ? metadata.rating : undefined,
+								page_id: metadata != null ? metadata.page_id : undefined,
 								last_revision: change.revision,
 								global_last_revision: metadata != null ? metadata.global_last_revision : 0
 							}
@@ -306,6 +317,11 @@ class WikiDot {
 							}
 
 							if (pageMeta.page_id != undefined) {
+								newMeta.page_id = pageMeta.page_id
+
+								if (newMeta.rating != undefined)
+									newMeta.rating = pageMeta.rating
+
 								if (metadata == null) {
 									let changes: PageRevision[]
 
