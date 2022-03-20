@@ -103,70 +103,38 @@ function removeFromSet<T>(set: T[], value: T) {
 	return indexOf != -1
 }
 
-class WikiDot {
-	public static normalizeName(name: string): string {
-		return name.replace(/:/g, '_')
+class DiskMeta<T> {
+	constructor(
+		public data: T,
+		private path: string
+	) {
+
 	}
 
-	private static usernameMatcher = /user:info\/(.*)/
-	private static nbspMatch = /&nbsp;/g
-	// spoon library
-	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
-	public static defaultPagenation = 20
-
-	private pendingFiles: number[] = []
-	private pendingPages: string[] = []
 	private initialized = false
 	private initializing = false
 	private initializeCallbacks: any[] = []
+	private initializeRejects: any[] = []
 	private metaIsDirty = false
 	private metaIsSyncing = false
 	private metaSyncCallbacks: any[] = []
 	private metaSyncRejects: any[] = []
 
-	private pushPendingFiles(...files: number[]) {
-		for (const value of files) {
-			if (pushToSet(this.pendingFiles, value)) {
-				this.metaIsDirty = true
-			}
-		}
-	}
-
-	private pushPendingPages(...pages: string[]) {
-		for (const value of pages) {
-			if (pushToSet(this.pendingPages, value)) {
-				this.metaIsDirty = true
-			}
-		}
-	}
-
-	private removePendingFiles(...files: number[]) {
-		for (const value of files) {
-			if (removeFromSet(this.pendingFiles, value)) {
-				this.metaIsDirty = true
-			}
-		}
-	}
-
-	private removePendingPages(...pages: string[]) {
-		for (const value of pages) {
-			if (removeFromSet(this.pendingPages, value)) {
-				this.metaIsDirty = true
-			}
-		}
+	public markDirty() {
+		this.metaIsDirty = true
 	}
 
 	private metaSyncTimer: NodeJS.Timeout | null = null
 
-	public startMetaSyncTimer(timeout = 2000) {
+	public startTimer(timeout = 2000) {
 		if (this.metaSyncTimer != null) {
 			return
 		}
 
-		this.metaSyncTimer = setInterval(() => this.syncMeta(), timeout)
+		this.metaSyncTimer = setInterval(() => this.sync(), timeout)
 	}
 
-	public stopMetaSyncTimer() {
+	public stopTimer() {
 		if (this.metaSyncTimer == null) {
 			return
 		}
@@ -175,7 +143,7 @@ class WikiDot {
 		this.metaSyncTimer = null
 	}
 
-	public syncMeta(): Promise<void> {
+	public sync(): Promise<void> {
 		return new Promise(async (resolve, reject) => {
 			if (!this.metaIsDirty || !this.initialized) {
 				resolve()
@@ -189,14 +157,9 @@ class WikiDot {
 			}
 
 			try {
-				const builtMeta: LocalWikiMeta = {}
+				const json = JSON.stringify(this.data, null, 4)
 
-				builtMeta.pending_files = this.pendingFiles
-				builtMeta.pending_pages = this.pendingPages
-
-				const json = JSON.stringify(builtMeta, null, 4)
-
-				await promises.writeFile(`./storage/${this.name}/meta/local.json`, json)
+				await promises.writeFile(this.path, json)
 				this.metaIsDirty = false
 
 				resolve()
@@ -218,7 +181,7 @@ class WikiDot {
 		})
 	}
 
-	private initialize(): Promise<void> {
+	public initialize(): Promise<void> {
 		return new Promise(async (resolve, reject) => {
 			if (this.initialized) {
 				resolve()
@@ -227,23 +190,26 @@ class WikiDot {
 
 			if (this.initializing) {
 				this.initializeCallbacks.push(resolve)
+				this.initializeRejects.push(reject)
 				return
 			}
 
 			try {
-				const read = await promises.readFile(`./storage/${this.name}/meta/local.json`, {encoding: 'utf-8'})
+				const read = await promises.readFile(this.path, {encoding: 'utf-8'})
 				const json = JSON.parse(read)
-
-				if (Array.isArray(json.pending_files)) {
-					this.pendingFiles = json.pending_files
-				}
-
-				if (Array.isArray(json.pending_pages)) {
-					this.pendingPages = json.pending_pages
-				}
+				this.data = json
 			} catch(err) {
-				this.error(`Unable to read local meta because of ${err}`)
-				this.error(`NOTE: In most cases, this is normal (e.g. first start, or meta was never utilized)`)
+				this.initialized = true
+				this.initializing = false
+
+				reject(err)
+
+				for (const callback of this.initializeRejects) {
+					callback(err)
+				}
+
+				this.initializeCallbacks = []
+				return
 			}
 
 			this.initialized = true
@@ -256,7 +222,73 @@ class WikiDot {
 			}
 
 			this.initializeCallbacks = []
+			this.initializeRejects = []
 		})
+	}
+}
+
+class WikiDot {
+	public static normalizeName(name: string): string {
+		return name.replace(/:/g, '_')
+	}
+
+	private static usernameMatcher = /user:info\/(.*)/
+	private static nbspMatch = /&nbsp;/g
+	// spoon library
+	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
+	public static defaultPagenation = 20
+
+	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_files.json`)
+	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_pages.json`)
+
+	private pushPendingFiles(...files: number[]) {
+		for (const value of files) {
+			if (pushToSet(this.pendingFiles.data, value)) {
+				this.pendingFiles.markDirty()
+			}
+		}
+	}
+
+	private pushPendingPages(...pages: string[]) {
+		for (const value of pages) {
+			if (pushToSet(this.pendingPages.data, value)) {
+				this.pendingPages.markDirty()
+			}
+		}
+	}
+
+	private removePendingFiles(...files: number[]) {
+		for (const value of files) {
+			if (removeFromSet(this.pendingFiles.data, value)) {
+				this.pendingFiles.markDirty()
+			}
+		}
+	}
+
+	private removePendingPages(...pages: string[]) {
+		for (const value of pages) {
+			if (removeFromSet(this.pendingPages.data, value)) {
+				this.pendingPages.markDirty()
+			}
+		}
+	}
+
+	public startMetaSyncTimer(timeout = 2000) {
+		this.pendingFiles.startTimer(timeout)
+		this.pendingPages.startTimer(timeout)
+	}
+
+	public stopMetaSyncTimer() {
+		this.pendingFiles.stopTimer()
+		this.pendingPages.stopTimer()
+	}
+
+	public syncMeta() {
+		return Promise.all([this.pendingFiles.sync(), this.pendingPages.sync()])
+	}
+
+	private initialize() {
+		return Promise.allSettled([this.pendingFiles.initialize(), this.pendingPages.initialize()])
 	}
 
 	public client = new HTTPClient()
@@ -673,7 +705,7 @@ class WikiDot {
 	public async cachePageMetadata() {
 		await this.initialize()
 
-		let page = 725
+		let page = 832
 		const seen = new Map<string, boolean>()
 
 		while (true) {
