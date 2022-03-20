@@ -76,6 +76,33 @@ function reencodeComponent(str: string) {
 
 export {reencodeComponent}
 
+interface LocalWikiMeta {
+	// files which we got meta for, but failed to download themselves
+	pending_files?: number[]
+
+	// pages which are falsely cached by cloudflare as HTTP 503 or something
+	pending_pages?: string[]
+}
+
+function pushToSet<T>(set: T[], value: T) {
+	if (!set.includes(value)) {
+		set.push(value)
+		return true
+	}
+
+	return false
+}
+
+function removeFromSet<T>(set: T[], value: T) {
+	const indexOf = set.indexOf(value)
+
+	if (indexOf != -1) {
+		set.splice(indexOf, 1)
+	}
+
+	return indexOf != -1
+}
+
 class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -87,17 +114,167 @@ class WikiDot {
 	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
 	public static defaultPagenation = 20
 
+	private pendingFiles: number[] = []
+	private pendingPages: string[] = []
+	private initialized = false
+	private initializing = false
+	private initializeCallbacks: any[] = []
+	private metaIsDirty = false
+	private metaIsSyncing = false
+	private metaSyncCallbacks: any[] = []
+	private metaSyncRejects: any[] = []
+
+	private pushPendingFiles(...files: number[]) {
+		for (const value of files) {
+			if (pushToSet(this.pendingFiles, value)) {
+				this.metaIsDirty = true
+			}
+		}
+	}
+
+	private pushPendingPages(...pages: string[]) {
+		for (const value of pages) {
+			if (pushToSet(this.pendingPages, value)) {
+				this.metaIsDirty = true
+			}
+		}
+	}
+
+	private removePendingFiles(...files: number[]) {
+		for (const value of files) {
+			if (removeFromSet(this.pendingFiles, value)) {
+				this.metaIsDirty = true
+			}
+		}
+	}
+
+	private removePendingPages(...pages: string[]) {
+		for (const value of pages) {
+			if (removeFromSet(this.pendingPages, value)) {
+				this.metaIsDirty = true
+			}
+		}
+	}
+
+	private metaSyncTimer: NodeJS.Timeout | null = null
+
+	public startMetaSyncTimer(timeout = 2000) {
+		if (this.metaSyncTimer != null) {
+			return
+		}
+
+		this.metaSyncTimer = setInterval(() => this.syncMeta(), timeout)
+	}
+
+	public stopMetaSyncTimer() {
+		if (this.metaSyncTimer == null) {
+			return
+		}
+
+		clearInterval(this.metaSyncTimer)
+		this.metaSyncTimer = null
+	}
+
+	public syncMeta(): Promise<void> {
+		return new Promise(async (resolve, reject) => {
+			if (!this.metaIsDirty || !this.initialized) {
+				resolve()
+				return
+			}
+
+			if (this.metaIsSyncing) {
+				this.metaSyncCallbacks.push(resolve)
+				this.metaSyncRejects.push(reject)
+				return
+			}
+
+			try {
+				const builtMeta: LocalWikiMeta = {}
+
+				builtMeta.pending_files = this.pendingFiles
+				builtMeta.pending_pages = this.pendingPages
+
+				const json = JSON.stringify(builtMeta, null, 4)
+
+				await promises.writeFile(`./storage/${this.name}/meta/local.json`, json)
+				this.metaIsDirty = false
+
+				resolve()
+
+				for (const callback of this.metaSyncCallbacks) {
+					callback()
+				}
+			} catch(err) {
+				reject(err)
+
+				for (const callback of this.metaSyncRejects) {
+					callback(err)
+				}
+			}
+
+			this.metaSyncCallbacks = []
+			this.metaSyncRejects = []
+			this.metaIsSyncing = false
+		})
+	}
+
+	private initialize(): Promise<void> {
+		return new Promise(async (resolve, reject) => {
+			if (this.initialized) {
+				resolve()
+				return
+			}
+
+			if (this.initializing) {
+				this.initializeCallbacks.push(resolve)
+				return
+			}
+
+			try {
+				const read = await promises.readFile(`./storage/${this.name}/meta/local.json`, {encoding: 'utf-8'})
+				const json = JSON.parse(read)
+
+				if (Array.isArray(json.pending_files)) {
+					this.pendingFiles = json.pending_files
+				}
+
+				if (Array.isArray(json.pending_pages)) {
+					this.pendingPages = json.pending_pages
+				}
+			} catch(err) {
+				this.error(`Unable to read local meta because of ${err}`)
+				this.error(`NOTE: In most cases, this is normal (e.g. first start, or meta was never utilized)`)
+			}
+
+			this.initialized = true
+			this.initializing = false
+
+			resolve()
+
+			for (const callback of this.initializeCallbacks) {
+				callback()
+			}
+
+			this.initializeCallbacks = []
+		})
+	}
+
 	public client = new HTTPClient()
 	private ajaxURL: URL
 
 	constructor(private name: string, private url: string = `https://${name}.wikidot.com`) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
+		this.startMetaSyncTimer()
 	}
 
 	private fetchingToken = false
 
 	private log(str: string) {
 		process.stdout.write(`[${this.name}]: ${str}\n`)
+	}
+
+	private error(str: string) {
+		process.stderr.write(`[${this.name}]: ${str}\n`)
 	}
 
 	public async fetchToken() {
@@ -329,6 +506,8 @@ class WikiDot {
 	}
 
 	public async fetchFilesFor(page_id: number) {
+		await this.initialize()
+
 		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
 			const match = fileMeta.url.match(WikiDot.localFileMatch)!
 			await this.writeFileMeta(match[1], fileMeta)
@@ -364,8 +543,10 @@ class WikiDot {
 				this.client.get(fileMeta.url).then(async buffer => {
 					await promises.mkdir(`./storage/${this.name}/files/${split.join('/')}`, {recursive: true})
 					await promises.writeFile(`./storage/${this.name}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
+					this.removePendingFiles(fileMeta.file_id)
 				}).catch(err => {
 					this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
+					this.pushPendingFiles(fileMeta.file_id)
 				})
 			}
 		}
@@ -490,7 +671,9 @@ class WikiDot {
 	}
 
 	public async cachePageMetadata() {
-		let page = 171
+		await this.initialize()
+
+		let page = 725
 		const seen = new Map<string, boolean>()
 
 		while (true) {
@@ -498,7 +681,7 @@ class WikiDot {
 			const changes = await this.fetchChanges(++page)
 
 			for (const change of changes) {
-				if (!seen.has(change.name) && !change.name.startsWith('nav:')) {
+				if (!seen.has(change.name) && !change.name.startsWith('nav:') && !change.name.startsWith('tech:')) {
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
@@ -523,8 +706,11 @@ class WikiDot {
 									pageMeta = await this.fetchGeneric(change.name)
 									break
 								} catch(err) {
-									this.log(`Encountered ${err}, sleeping for 60 seconds`)
-									await sleep(60_000)
+									//this.log(`Encountered ${err}, sleeping for 60 seconds`)
+									this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
+									//await sleep(60_000)
+									this.pushPendingPages(change.name)
+									continue
 								}
 							}
 
@@ -611,6 +797,8 @@ class WikiDot {
 								}
 							}
 						}
+
+						this.removePendingPages(change.name)
 					}
 				}
 			}
