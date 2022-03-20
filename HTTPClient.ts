@@ -264,7 +264,23 @@ class HTTPClient {
 				if (response.headers.location) {
 					// redirect, it might also switch protocols
 					value.onStart = () => {}
-					value.url = new urlModule.URL(response.headers.location)
+
+					try {
+						if (response.headers.location.startsWith('//')) {
+							// same protocol, different hostname and path
+							value.url = new urlModule.URL(value.url.protocol + response.headers.location)
+						} else if (response.headers.location.startsWith('/')) {
+							// same protocol and hostname, different path
+							value.url = new urlModule.URL(value.url.protocol + '//' + value.url.hostname + response.headers.location)
+						} else {
+							value.url = new urlModule.URL(response.headers.location)
+						}
+					} catch(err) {
+						value.reject(new HTTPError(response.statusCode, String(err), 'Location URL is invalid: ' + response.headers.location))
+						this.work()
+						return
+					}
+
 					value.https = value.url.protocol == 'https:'
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.queue.push(value)
