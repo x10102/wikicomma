@@ -25,7 +25,7 @@ interface PageRevision {
 
 interface PageMeta {
 	name: string
-	page_id?: number
+	page_id: number
 	rating?: number
 	last_revision: number
 	global_last_revision: number
@@ -230,6 +230,15 @@ interface LocalWikiMeta {
 	last_pagenation: number
 }
 
+interface FileMap {
+	[key: string]: {url: string, path: string}
+}
+
+interface PendingRevisions {
+	// revision -> page
+	[key: string]: number
+}
+
 class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -243,6 +252,8 @@ class WikiDot {
 
 	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_files.json`)
 	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_pages.json`)
+	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `./storage/${this.name}/meta/file_map.json`)
+	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `./storage/${this.name}/meta/pending_revisions.json`)
 
 	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
 		last_page: 0,
@@ -294,20 +305,36 @@ class WikiDot {
 		this.pendingFiles.startTimer(timeout)
 		this.pendingPages.startTimer(timeout)
 		this.localMeta.startTimer(timeout)
+		this.fileMap.startTimer(timeout)
+		this.pendingRevisions.startTimer(timeout)
 	}
 
 	public stopMetaSyncTimer() {
 		this.pendingFiles.stopTimer()
 		this.pendingPages.stopTimer()
 		this.localMeta.stopTimer()
+		this.fileMap.stopTimer()
+		this.pendingRevisions.stopTimer()
 	}
 
 	public syncMeta() {
-		return Promise.all([this.pendingFiles.sync(), this.pendingPages.sync(), this.localMeta.sync()])
+		return Promise.all([
+			this.pendingFiles.sync(),
+			this.pendingPages.sync(),
+			this.localMeta.sync(),
+			this.fileMap.sync(),
+			this.pendingRevisions.sync(),
+		])
 	}
 
 	private initialize() {
-		return Promise.allSettled([this.pendingFiles.initialize(), this.pendingPages.initialize(), this.localMeta.initialize()])
+		return Promise.allSettled([
+			this.pendingFiles.initialize(),
+			this.pendingPages.initialize(),
+			this.localMeta.initialize(),
+			this.fileMap.initialize(),
+			this.pendingRevisions.initialize(),
+		])
 	}
 
 	public client = new HTTPClient()
@@ -582,6 +609,13 @@ class WikiDot {
 
 				const last = split.splice(split.length - 1)[0]
 
+				this.fileMap.data[fileMeta.file_id] = {
+					url: fileMeta.url,
+					path: `${split.join('/')}/${last}`
+				}
+
+				this.fileMap.markDirty()
+
 				try {
 					await promises.stat(`./storage/${this.name}/files/${split.join('/')}/${last}`)
 					break
@@ -738,14 +772,14 @@ class WikiDot {
 					if (change.revision != undefined) {
 						let metadata = await this.loadPageMetadata(change.name)
 
-						if (metadata == null || metadata.last_revision < change.revision) {
+						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined) {
 							this.log(`Need to renew ${change.name}`)
 
 							const newMeta: PageMeta = {
 								name: change.name,
 								revisions: [],
 								rating: metadata != null ? metadata.rating : undefined,
-								page_id: metadata != null ? metadata.page_id : undefined,
+								page_id: metadata != null ? metadata.page_id : -1,
 								last_revision: change.revision,
 								global_last_revision: metadata != null ? metadata.global_last_revision : 0
 							}
@@ -820,7 +854,14 @@ class WikiDot {
 							metadata = newMeta
 						}
 
+						if (metadata.page_id == undefined) {
+							this.pushPendingPages(change.name)
+							continue
+						}
+
 						let fetchFilesOnce = false
+						const revisionsToFetch = []
+						let revisionColumn = []
 
 						for (const key in metadata.revisions) {
 							const rev = metadata.revisions[key]
@@ -831,19 +872,38 @@ class WikiDot {
 									this.fetchFilesFor(metadata.page_id)
 								}
 
-								while (true) {
+								revisionColumn.push(rev)
+
+								if (revisionColumn.length >= 5) {
+									revisionsToFetch.push(revisionColumn)
+									revisionColumn = []
+								}
+							}
+						}
+
+						if (revisionColumn.length != 0) {
+							revisionsToFetch.push(revisionColumn)
+						}
+
+						for (const column of revisionsToFetch) {
+							const promises = []
+
+							for (const rev of column) {
+								promises.push((async () => {
 									try {
 										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
 										const body = await this.fetchRevision(rev.global_revision)
 										await this.writeRevision(change.name, rev.revision, body)
-										// this.fetchFilesFrom(body, metadata.page_id)
-										break
 									} catch(err) {
-										this.log(`Encountered ${err}, sleeping for 60 seconds`)
-										await sleep(60_000)
+										this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
+										// await sleep(60_000)
+										this.pendingRevisions.data[rev.global_revision] = metadata.page_id
+										this.pendingRevisions.markDirty()
 									}
-								}
+								})())
 							}
+
+							await Promise.allSettled(promises)
 						}
 
 						this.removePendingPages(change.name)
