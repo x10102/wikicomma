@@ -287,15 +287,15 @@ class WikiDot {
 	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
 	public static defaultPagenation = 100
 
-	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_files.json`)
-	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_pages.json`)
-	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `./storage/${this.name}/meta/file_map.json`)
-	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `./storage/${this.name}/meta/pending_revisions.json`)
+	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_files.json`)
+	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_pages.json`)
+	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this.workingDirectory}/meta/file_map.json`)
+	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this.workingDirectory}/meta/pending_revisions.json`)
 
 	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
 		last_page: 0,
 		last_pagenation: WikiDot.defaultPagenation
-	}, `./storage/${this.name}/meta/local.json`, v => {
+	}, `${this.workingDirectory}/meta/local.json`, v => {
 		if (typeof v != 'object') {
 			v = {}
 		}
@@ -377,7 +377,11 @@ class WikiDot {
 	public client = new HTTPClient()
 	private ajaxURL: URL
 
-	constructor(private name: string, private url: string = `https://${name}.wikidot.com`) {
+	constructor(
+		private name: string,
+		private url: string = `https://${name}.wikidot.com`,
+		private workingDirectory: string = `./storage/${name}`
+	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
 	}
@@ -654,7 +658,7 @@ class WikiDot {
 				this.fileMap.markDirty()
 
 				try {
-					await promises.stat(`./storage/${this.name}/files/${split.join('/')}/${last}`)
+					await promises.stat(`${this.workingDirectory}/files/${split.join('/')}/${last}`)
 					break
 				} catch(err) {
 
@@ -663,8 +667,8 @@ class WikiDot {
 				this.log(`Fetching file ${fileMeta.url}`)
 
 				this.client.get(fileMeta.url).then(async buffer => {
-					await promises.mkdir(`./storage/${this.name}/files/${split.join('/')}`, {recursive: true})
-					await promises.writeFile(`./storage/${this.name}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
+					await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
+					await promises.writeFile(`${this.workingDirectory}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
 					this.removePendingFiles(fileMeta.file_id)
 				}).catch(err => {
 					this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
@@ -695,7 +699,7 @@ class WikiDot {
 				const last = split.splice(split.length - 1)[0]
 
 				try {
-					await promises.stat(`./storage/${this.name}/files/${split.join('/')}/${last}`)
+					await promises.stat(`${this.workingDirectory}/files/${split.join('/')}/${last}`)
 					break
 				} catch(err) {
 
@@ -704,8 +708,8 @@ class WikiDot {
 				this.log(`Fetching file ${url}`)
 
 				this.client.get(url).then(async buffer => {
-					await promises.mkdir(`./storage/${this.name}/files/${split.join('/')}`, {recursive: true})
-					await promises.writeFile(`./storage/${this.name}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
+					await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
+					await promises.writeFile(`${this.workingDirectory}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
 				}).catch(err => {
 					this.log(`Unable to fetch ${url} because ${err}`)
 				})
@@ -947,11 +951,12 @@ class WikiDot {
 				}
 			}
 
-			this.localMeta.data.last_page = page
-			this.localMeta.markDirty()
-
 			if (changes.length < this.localMeta.data.last_pagenation) {
+				this.log(`Reached end of entire wiki history`)
 				break
+			} else {
+				this.localMeta.data.last_page = page
+				this.localMeta.markDirty()
 			}
 		}
 	}
@@ -959,7 +964,7 @@ class WikiDot {
 	// local I/O
 	public async revisionExists(page: string, revision: number) {
 		try {
-			await promises.stat(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
+			await promises.stat(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
 			return true
 		} catch(err) {
 			return false
@@ -967,13 +972,13 @@ class WikiDot {
 	}
 
 	public async writeRevision(page: string, revision: number, body: string) {
-		await promises.mkdir(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
-		await promises.writeFile(`./storage/${this.name}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`, body)
+		await promises.mkdir(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`, body)
 	}
 
 	public async loadPageMetadata(page: string) {
 		try {
-			const read = await promises.readFile(`./storage/${this.name}/meta/pages/${WikiDot.normalizeName(page)}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as PageMeta
 		} catch(err) {
 			return null
@@ -981,13 +986,13 @@ class WikiDot {
 	}
 
 	public async writePageMetadata(page: string, meta: PageMeta) {
-		await promises.mkdir(`./storage/${this.name}/meta/pages`, {recursive: true})
-		await promises.writeFile(`./storage/${this.name}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
+		await promises.mkdir(`${this.workingDirectory}/meta/pages`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
 	}
 
 	public async readFileMeta(path: string) {
 		try {
-			const read = await promises.readFile(`./storage/${this.name}/meta/files/${path}`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this.workingDirectory}/meta/files/${path}`, {encoding: 'utf-8'})
 			return JSON.parse(read) as FileMeta
 		} catch(err) {
 			return null
@@ -1007,8 +1012,8 @@ class WikiDot {
 
 		const last = split.splice(split.length - 1)[0]
 
-		await promises.mkdir(`./storage/${this.name}/meta/files/${split.join('/')}`, {recursive: true})
-		await promises.writeFile(`./storage/${this.name}/meta/files/${split.join('/')}/${last}.json`, JSON.stringify(meta, null, 4))
+		await promises.mkdir(`${this.workingDirectory}/meta/files/${split.join('/')}`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/files/${split.join('/')}/${last}.json`, JSON.stringify(meta, null, 4))
 	}
 }
 
