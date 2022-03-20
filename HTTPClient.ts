@@ -1,5 +1,5 @@
 
-// Copyright (c) 2018 DBotThePony
+// Copyright (c) 2022 DBotThePony
 
 // Permission is hereby granted, free of charge, to any person
 // obtaining a copy of this software and associated documentation
@@ -24,6 +24,12 @@
 import http = require('http')
 import https = require('https')
 import urlModule = require('url')
+import {unzip, brotliDecompress, inflate} from 'zlib'
+import {promisify} from 'util'
+
+const punzip = promisify(unzip)
+const pbrotliDecompress = promisify(brotliDecompress)
+const pinflate = promisify(inflate)
 
 interface Headers {
 	[key: string]: string
@@ -224,7 +230,8 @@ class HTTPClient {
 			headers: {
 				'User-Agent': 'Mozilla/5.0 (Compatible; ArchiveBot) WikiComma/universal',
 				'Connection': 'keep-alive',
-				'Accept': '*/*'
+				'Accept': '*/*',
+				'Accept-Encoding': 'br, gzip, deflate'
 			}
 		}
 
@@ -288,37 +295,7 @@ class HTTPClient {
 				value.reject(err)
 			})
 
-			/*
-			response.socket.setMaxListeners(50000)
-
-			response.socket.once('error', (err) => {
-				if (finished) {
-					return
-				}
-
-				this.workingConnections--
-				this.working = this.workingConnections != 0
-				this.work()
-				value.reject(err)
-			})
-
-			response.socket.once('close', (isError) => {
-				if (finished) {
-					return
-				}
-
-				if (!isError) {
-					return
-				}
-
-				this.workingConnections--
-				this.working = this.workingConnections != 0
-				this.work()
-				value.reject({response: null, body: null, message: 'Socket termination error'})
-			})
-			*/
-
-			response.on('end', () => {
+			response.on('end', async () => {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
 				this.work()
@@ -329,7 +306,7 @@ class HTTPClient {
 					size += buff.length
 				}
 
-				const newbuff = Buffer.allocUnsafe(size)
+				let newbuff = Buffer.allocUnsafe(size)
 				let offset = 0
 
 				for (const buff of memcache) {
@@ -342,6 +319,18 @@ class HTTPClient {
 
 				// mark buffers as dead for gc
 				memcache = []
+
+				switch (response.headers['content-encoding']) {
+					case 'br':
+						newbuff = await pbrotliDecompress(newbuff)
+						break
+					case 'gzip':
+						newbuff = await punzip(newbuff)
+						break
+					case 'deflate':
+						newbuff = await pinflate(newbuff)
+						break
+				}
 
 				finished = true
 

@@ -1,4 +1,26 @@
 
+// Copyright (c) 2022 DBotThePony
+
+// Permission is hereby granted, free of charge, to any person
+// obtaining a copy of this software and associated documentation
+// files (the "Software"), to deal in the Software without
+// restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons
+// to whom the Software is furnished to do so, subject to the
+// following conditions:
+
+// The above copyright notice and this permission notice shall be
+// included in all copiesor substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+// OTHER DEALINGS IN THE SOFTWARE.
+
 import { encode } from "querystring"
 import { HTTPClient } from './HTTPClient'
 import { parse, HTMLElement } from 'node-html-parser'
@@ -93,6 +115,21 @@ function removeFromSet<T>(set: T[], value: T) {
 	}
 
 	return indexOf != -1
+}
+
+function flipArray<T>(input: T[]): T[] {
+	let i = 0
+	let j = input.length - 1
+
+	while (i < j) {
+		const value = input[j]
+		input[j] = input[i]
+		input[i] = value
+		i++
+		j--
+	}
+
+	return input
 }
 
 class DiskMeta<T> {
@@ -860,8 +897,7 @@ class WikiDot {
 						}
 
 						let fetchFilesOnce = false
-						const revisionsToFetch = []
-						let revisionColumn = []
+						const revisionsToFetch: PageRevision[] = []
 
 						for (const key in metadata.revisions) {
 							const rev = metadata.revisions[key]
@@ -872,39 +908,39 @@ class WikiDot {
 									this.fetchFilesFor(metadata.page_id)
 								}
 
-								revisionColumn.push(rev)
+								revisionsToFetch.push(rev)
+							}
+						}
 
-								if (revisionColumn.length >= 5) {
-									revisionsToFetch.push(revisionColumn)
-									revisionColumn = []
+						flipArray(revisionsToFetch)
+
+						const worker = async () => {
+							while (true) {
+								const rev = revisionsToFetch.pop()
+
+								if (rev == undefined) {
+									break
+								}
+
+								try {
+									this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
+									const body = await this.fetchRevision(rev.global_revision)
+									await this.writeRevision(change.name, rev.revision, body)
+								} catch(err) {
+									this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
+									this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
+									this.pendingRevisions.markDirty()
 								}
 							}
 						}
 
-						if (revisionColumn.length != 0) {
-							revisionsToFetch.push(revisionColumn)
-						}
-
-						for (const column of revisionsToFetch) {
-							const promises = []
-
-							for (const rev of column) {
-								promises.push((async () => {
-									try {
-										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
-										const body = await this.fetchRevision(rev.global_revision)
-										await this.writeRevision(change.name, rev.revision, body)
-									} catch(err) {
-										this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
-										// await sleep(60_000)
-										this.pendingRevisions.data[rev.global_revision] = metadata.page_id
-										this.pendingRevisions.markDirty()
-									}
-								})())
-							}
-
-							await Promise.allSettled(promises)
-						}
+						await Promise.allSettled([
+							worker(),
+							worker(),
+							worker(),
+							worker(),
+							worker(),
+						])
 
 						this.removePendingPages(change.name)
 					}
