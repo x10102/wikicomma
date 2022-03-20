@@ -78,7 +78,7 @@ interface FileMeta {
 const reencoding_table = [
 	[/\\/g, encodeURIComponent('\\')],
 	[/:/g, encodeURIComponent(':')],
-	[/\*/g, encodeURIComponent('*')],
+	[/\*/g, '%2A'],
 	[/\?/g, encodeURIComponent('?')],
 	[/"/g, encodeURIComponent('"')],
 	[/</g, encodeURIComponent('<')],
