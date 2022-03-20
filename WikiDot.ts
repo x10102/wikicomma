@@ -705,7 +705,7 @@ class WikiDot {
 	public async cachePageMetadata() {
 		await this.initialize()
 
-		let page = 832
+		let page = 945
 		const seen = new Map<string, boolean>()
 
 		while (true) {
@@ -733,17 +733,14 @@ class WikiDot {
 
 							let pageMeta: GenericPageData
 
-							while (true) {
-								try {
-									pageMeta = await this.fetchGeneric(change.name)
-									break
-								} catch(err) {
-									//this.log(`Encountered ${err}, sleeping for 60 seconds`)
-									this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
-									//await sleep(60_000)
-									this.pushPendingPages(change.name)
-									continue
-								}
+							try {
+								pageMeta = await this.fetchGeneric(change.name)
+							} catch(err) {
+								//this.log(`Encountered ${err}, sleeping for 60 seconds`)
+								this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
+								//await sleep(60_000)
+								this.pushPendingPages(change.name)
+								continue
 							}
 
 							if (pageMeta.page_id != undefined) {
