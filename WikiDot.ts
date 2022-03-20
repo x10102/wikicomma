@@ -76,14 +76,6 @@ function reencodeComponent(str: string) {
 
 export {reencodeComponent}
 
-interface LocalWikiMeta {
-	// files which we got meta for, but failed to download themselves
-	pending_files?: number[]
-
-	// pages which are falsely cached by cloudflare as HTTP 503 or something
-	pending_pages?: string[]
-}
-
 function pushToSet<T>(set: T[], value: T) {
 	if (!set.includes(value)) {
 		set.push(value)
@@ -106,7 +98,8 @@ function removeFromSet<T>(set: T[], value: T) {
 class DiskMeta<T> {
 	constructor(
 		public data: T,
-		private path: string
+		private path: string,
+		private dataFixer?: (v: any) => T
 	) {
 
 	}
@@ -197,7 +190,12 @@ class DiskMeta<T> {
 			try {
 				const read = await promises.readFile(this.path, {encoding: 'utf-8'})
 				const json = JSON.parse(read)
-				this.data = json
+
+				if (this.dataFixer == undefined) {
+					this.data = json
+				} else {
+					this.data = this.dataFixer(json)
+				}
 			} catch(err) {
 				this.initialized = true
 				this.initializing = false
@@ -227,6 +225,11 @@ class DiskMeta<T> {
 	}
 }
 
+interface LocalWikiMeta {
+	last_page: number
+	last_pagenation: number
+}
+
 class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -240,6 +243,20 @@ class WikiDot {
 
 	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_files.json`)
 	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `./storage/${this.name}/meta/pending_pages.json`)
+
+	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
+		last_page: 0,
+		last_pagenation: WikiDot.defaultPagenation
+	}, `./storage/${this.name}/meta/local.json`, v => {
+		if (typeof v != 'object') {
+			v = {}
+		}
+
+		v.last_page = v.last_page != undefined ? v.last_page : 0
+		v.last_pagenation = v.last_pagenation != undefined ? v.last_pagenation : WikiDot.defaultPagenation
+
+		return v
+	})
 
 	private pushPendingFiles(...files: number[]) {
 		for (const value of files) {
@@ -276,19 +293,21 @@ class WikiDot {
 	public startMetaSyncTimer(timeout = 2000) {
 		this.pendingFiles.startTimer(timeout)
 		this.pendingPages.startTimer(timeout)
+		this.localMeta.startTimer(timeout)
 	}
 
 	public stopMetaSyncTimer() {
 		this.pendingFiles.stopTimer()
 		this.pendingPages.stopTimer()
+		this.localMeta.stopTimer()
 	}
 
 	public syncMeta() {
-		return Promise.all([this.pendingFiles.sync(), this.pendingPages.sync()])
+		return Promise.all([this.pendingFiles.sync(), this.pendingPages.sync(), this.localMeta.sync()])
 	}
 
 	private initialize() {
-		return Promise.allSettled([this.pendingFiles.initialize(), this.pendingPages.initialize()])
+		return Promise.allSettled([this.pendingFiles.initialize(), this.pendingPages.initialize(), this.localMeta.initialize()])
 	}
 
 	public client = new HTTPClient()
@@ -705,12 +724,12 @@ class WikiDot {
 	public async cachePageMetadata() {
 		await this.initialize()
 
-		let page = 945
+		let page = this.localMeta.data.last_page
 		const seen = new Map<string, boolean>()
 
 		while (true) {
 			this.log(`Fetching latest changes on page ${page + 1}`)
-			const changes = await this.fetchChanges(++page)
+			const changes = await this.fetchChanges(++page, this.localMeta.data.last_pagenation)
 
 			for (const change of changes) {
 				if (!seen.has(change.name) && !change.name.startsWith('nav:') && !change.name.startsWith('tech:')) {
@@ -832,7 +851,10 @@ class WikiDot {
 				}
 			}
 
-			if (changes.length < 20) {
+			this.localMeta.data.last_page = page
+			this.localMeta.markDirty()
+
+			if (changes.length < this.localMeta.data.last_pagenation) {
 				break
 			}
 		}
