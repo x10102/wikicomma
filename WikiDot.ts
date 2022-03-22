@@ -23,17 +23,19 @@
 
 import { encode } from "querystring"
 import { HTTPClient } from './HTTPClient'
-import { parse, HTMLElement } from 'node-html-parser'
+import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises } from 'fs'
 import { promisify } from 'util'
 import { unescape } from 'html-escaper'
 
 const sleep = promisify(setTimeout)
 
+type User = number | string | null
+
 interface RecentChange {
 	name: string
 	revision?: number
-	author?: string
+	author: User
 }
 
 interface PageRevision {
@@ -67,7 +69,7 @@ interface FileMeta {
 	size_bytes: number
 	mime: string
 	content: string
-	author: string | null
+	author: User
 	stamp: number
 }
 
@@ -130,6 +132,64 @@ function flipArray<T>(input: T[]): T[] {
 	}
 
 	return input
+}
+
+interface ForumCategory {
+	title: string
+	description: string
+	id: number
+	last: number
+	posts: number
+	threads: number
+	lastUser: User
+}
+
+interface ForumRevisionBody {
+	title: string
+	content: string
+}
+
+interface HeadlessForumPost {
+	id: number
+	poster: User
+	stamp: number
+	lastEdit?: number
+	lastEditBy?: User
+}
+
+interface ForumPost extends ForumRevisionBody, HeadlessForumPost {
+	children: ForumPost[]
+}
+
+interface LocalForumPost extends HeadlessForumPost {
+	revisions: LocalPostRevision[]
+	children: LocalForumPost[]
+}
+
+interface PostRevision {
+	author: User
+	stamp: number
+	id: number
+}
+
+interface LocalPostRevision extends PostRevision {
+	title: string
+}
+
+interface ForumThread {
+	title: string
+	id: number
+	description: string
+	last?: number
+	lastUser?: User
+	started: number
+	startedUser: User
+	postsNum: number
+	sticky: boolean
+}
+
+interface LocalForumThread extends ForumThread {
+	posts: LocalForumPost[]
 }
 
 class DiskMeta<T> {
@@ -283,6 +343,30 @@ class WikiDot {
 	}
 
 	private static usernameMatcher = /user:info\/(.*)/
+
+	private static extractUser(elem: HTMLElement | null): User {
+		if (elem == null) {
+			return null
+		}
+
+		const regMatch = elem.querySelector('a')?.attributes['href'].match(WikiDot.usernameMatcher)
+		let user: string | number | undefined = regMatch ? regMatch[1] : undefined
+
+		if (!user) {
+			user = elem.querySelector('span.deleted')?.attributes['data-id']
+
+			if (user) {
+				user = parseInt(user)
+			}
+		}
+
+		if (user == undefined) {
+			return null
+		}
+
+		return user
+	}
+
 	private static nbspMatch = /&nbsp;/g
 	// spoon library
 	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
@@ -420,8 +504,14 @@ class WikiDot {
 		})
 	}
 
-	private async fetchJson(options: any) {
-		return JSON.parse((await this.fetch(options)).toString('utf-8'))
+	private async fetchJson(options: any, custom = false) {
+		const json = JSON.parse((await this.fetch(options)).toString('utf-8'))
+
+		if (!custom && json.status != 'ok') {
+			throw Error(`Server returned ${json.status}, message: ${json.message}`)
+		}
+
+		return json
 	}
 
 	// low-level api
@@ -435,26 +525,21 @@ class WikiDot {
 			"moduleName": "changes/SiteChangesListModule",
 		})
 
-		if (json.status != 'ok') {
-			throw Error(`Server returned ${json.status}, message: ${json.message}`)
-		}
-
 		const html = parse(json.body)
 
 		for (const elem of html.querySelectorAll('.changes-list-item')) {
 			const url = elem.querySelector('td.title')?.querySelector('a')?.attrs['href']
 			const revision = elem.querySelector('td.revision-no')?.innerText?.match(/([0-9]+)/)
-			const mod_by = elem.querySelector('td.mod-by')?.querySelector('a')?.attrs['href']?.match(WikiDot.usernameMatcher)
+			const mod_by = WikiDot.extractUser(elem.querySelector('td.mod-by'))
 
 			if (url != undefined) {
-				const obj: RecentChange = {name: url.startsWith('/') ? url.substring(1) : url}
+				const obj: RecentChange = {
+					name: url.startsWith('/') ? url.substring(1) : url,
+					author: mod_by
+				}
 
 				if (revision != undefined && revision != null) {
 					obj.revision = parseInt(revision[1])
-				}
-
-				if (mod_by != undefined && mod_by != null) {
-					obj.author = mod_by[1]
 				}
 
 				listing.push(obj)
@@ -476,10 +561,6 @@ class WikiDot {
 			"page_id": page_id,
 			"moduleName": "history/PageRevisionListModule",
 		})
-
-		if (json.status != 'ok') {
-			throw Error(`Server returned ${json.status}, message: ${json.message}`)
-		}
 
 		const html = parse(json.body)
 
@@ -607,14 +688,334 @@ class WikiDot {
 			"moduleName": "history/PageSourceModule",
 		})
 
-		if (json.status != 'ok') {
-			throw Error(`Server returned ${json.status}, message: ${json.message}`)
-		}
-
 		const html = parse(json.body)
 		const div = html.querySelector('div.page-source')
 
 		return div != undefined ? unescape(div.innerText).replace(WikiDot.nbspMatch, ' ') : ''
+	}
+
+	private static categoryRegExp = /forum\/c-([0-9]+)/
+
+	public async fetchForumCategories() {
+		const listing: ForumCategory[] = []
+
+		const body = await this.client.get(`${this.url}/forum/start/hidden/show`)
+		const html = parse(body.toString('utf-8'))
+
+		const forum = html.querySelector('div.forum-start-box')!
+
+		for (const table of forum.querySelectorAll('table')) {
+			const rows = table.querySelectorAll('tr')
+
+			if (rows[0]?.attrs?.class == 'head') {
+				rows.splice(0, 1)
+			}
+
+			for (const row of rows) {
+				const name = row.querySelector('td.name')
+				const threads = row.querySelector('td.threads')
+				const posts = row.querySelector('td.posts')
+				const last = row.querySelector('td.last')
+
+				if (name == null || threads == null || posts == null || last == null) {
+					continue
+				}
+
+				const title = name.querySelector('div.title')!
+				const titleElem = title.querySelector('a')!
+				const titleText = unescape(titleElem.innerText.trim())
+				const categoryID = parseInt(titleElem.attributes['href'].match(WikiDot.categoryRegExp)![1])
+				const description = unescape(name.querySelector('div.description')!.innerText.trim())
+
+				const threadsNum = parseInt(threads.innerText.trim())
+				const postsNum = parseInt(posts.innerText.trim())
+
+				const lastDate = parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+				const lastUser = WikiDot.extractUser(last)
+
+				listing.push({
+					title: titleText,
+					description: description,
+					id: categoryID,
+					threads: threadsNum,
+					posts: postsNum,
+					last: lastDate,
+					lastUser: lastUser
+				})
+			}
+		}
+
+		return listing
+	}
+
+	private static threadRegExp = /forum\/t-([0-9]+)/
+
+	public async fetchThreads(category: number, page = 1) {
+		const listing: ForumThread[] = []
+
+		const body = await this.client.get(`${this.url}/forum/c-${category}/p/${page}`)
+		const html = parse(body.toString('utf-8'))
+
+		const rows = html.querySelector('div#page-content')!.querySelector('table.table')!.querySelectorAll('tr')
+
+		if (rows[0]?.attributes['class'] == 'head') {
+			rows.splice(0, 1)
+		}
+
+		for (const row of rows) {
+			const name = row.querySelector('td.name')
+			const started = row.querySelector('td.started')
+			const posts = row.querySelector('td.posts')
+			const last = row.querySelector('td.last')
+
+			if (name == null || started == null || posts == null || last == null) {
+				continue
+			}
+
+			const title = name.querySelector('div.title')!
+			const titleElem = title.querySelector('a')!
+			const titleText = unescape(titleElem.innerText.trim())
+			const threadID = parseInt(titleElem.attributes['href'].match(WikiDot.threadRegExp)![1])
+
+			// fairly weak check
+			const sticky = (title.firstChild instanceof TextNode) ? title.firstChild.innerText.trim() != '' : false
+
+			const description = unescape(name.querySelector('div.description')!.innerText.trim())
+			const postsNum = parseInt(posts.innerText.trim())
+			const lastDate = last.childNodes.length > 1 ? parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1]) : undefined
+			const lastUser = last.childNodes.length > 1 ? WikiDot.extractUser(last) : undefined
+			const startedDate = parseInt(started.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+			const startedUser = WikiDot.extractUser(started)
+
+			listing.push({
+				title: titleText,
+				id: threadID,
+				description: description,
+				postsNum: postsNum,
+				sticky: sticky,
+				last: lastDate,
+				lastUser: lastUser,
+				started: startedDate,
+				startedUser: startedUser
+			})
+		}
+
+		return listing
+	}
+
+	public async fetchAllThreads(category: number) {
+		const listing: ForumThread[] = []
+		let page = 0
+
+		while (true) {
+			const fetch = await this.fetchThreads(category, ++page)
+			listing.push(...fetch)
+
+			if (fetch.length < 20) {
+				break
+			}
+		}
+
+		return listing
+	}
+
+	public async fetchThreadsUntil(category: number, thread: number) {
+		const listing: ForumThread[] = []
+		let page = 0
+
+		while (true) {
+			const fetch = await this.fetchThreads(category, ++page)
+			let finish = false
+
+			for (const fthread of fetch) {
+				if (fthread.id <= thread) {
+					finish = true
+					break
+				}
+
+				listing.push(fthread)
+			}
+
+			if (fetch.length < 20 || finish) {
+				break
+			}
+		}
+
+		return listing
+	}
+
+	private static postRegExp = /post-([0-9]+)/
+
+	private static parsePost(postContainer: HTMLElement): ForumPost {
+		let post: HTMLElement | null = null
+		const childrenCointainers: HTMLElement[] = []
+
+		for (const elem of postContainer.childNodes) {
+			if (elem instanceof HTMLElement) {
+				if (elem.attributes['class'] == 'post') {
+					post = elem
+				} else if (elem.attributes['class'] == 'post-container') {
+					childrenCointainers.push(elem)
+				}
+			}
+		}
+
+		if (post == null) {
+			return {
+				id: -1,
+				title: 'ERROR',
+				poster: 'ERROR',
+				content: 'ERROR',
+				stamp: -1,
+				children: []
+			}
+		}
+
+		const postId = parseInt(post.attributes['id'].match(WikiDot.postRegExp)![1])
+		const head = post.querySelector('div.head')
+		const content = post.querySelector('div.content')
+		const title = post.querySelector('div.title')
+
+		if (head == null || content == null || title == null) {
+			return {
+				id: -1,
+				title: 'ERROR',
+				poster: 'ERROR',
+				content: 'ERROR',
+				stamp: -1,
+				children: []
+			}
+		}
+
+		const info = head.querySelector('div.info')
+
+		if (info == null) {
+			return {
+				id: -1,
+				title: 'ERROR',
+				poster: 'ERROR',
+				content: 'ERROR',
+				stamp: -1,
+				children: []
+			}
+		}
+
+		const poster = WikiDot.extractUser(info)
+		const stamp = parseInt(info.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+
+		const contentHtml = content.innerHTML
+
+		const obj: ForumPost = {
+			id: postId,
+			title: title.innerText.trim(),
+			poster: poster,
+			content: contentHtml,
+			stamp: stamp,
+			children: []
+		}
+
+		const changes = post.querySelector('div.changes')
+
+		if (changes != null) {
+			const stamp = parseInt(changes.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+			const poster = WikiDot.extractUser(changes)
+
+			obj.lastEdit = stamp
+			obj.lastEditBy = poster
+		}
+
+		for (const child of childrenCointainers) {
+			obj.children.push(this.parsePost(child))
+		}
+
+		return obj
+	}
+
+	public async fetchThreadPosts(thread: number, page = 1) {
+		const json = await this.fetchJson({
+			"t": thread,
+			"pageNo": page,
+			"order": "",
+			"moduleName": "forum/ForumViewThreadPostsModule",
+		})
+
+		const html = parse(json.body)
+		const containers: HTMLElement[] = []
+
+		for (const child of html.childNodes) {
+			if (child instanceof HTMLElement) {
+				if (child.attributes['class'] == 'post-container') {
+					containers.push(child)
+				}
+			}
+		}
+
+		const listing: ForumPost[] = []
+
+		for (const container of containers) {
+			listing.push(WikiDot.parsePost(container))
+		}
+
+		return listing
+	}
+
+	public async fetchAllThreadPosts(thread: number) {
+		const listing: ForumPost[] = []
+		let page = 0
+
+		while (true) {
+			const fetch = await this.fetchThreadPosts(thread, ++page)
+			listing.push(...fetch)
+
+			if (fetch.length < 10) {
+				break
+			}
+		}
+
+		return listing
+	}
+
+	public async fetchPostRevisionList(post: number) {
+		const json = await this.fetchJson({
+			"postId": post,
+			"moduleName": "forum/sub/ForumPostRevisionsModule",
+		})
+
+		const html = parse(json.body)
+		const listing: PostRevision[] = []
+
+		const table = html.querySelector('table.table')!
+
+		for (const row of table.querySelectorAll('tr')) {
+			const columns = row.querySelectorAll('td')
+			const author = WikiDot.extractUser(columns[0])
+			const stamp = parseInt(columns[1].querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+			const id = parseInt(columns[2].querySelector('a')!.attributes['onclick'].match(/([0-9]+)/)![1])
+
+			listing.push({
+				author: author,
+				stamp: stamp,
+				id: id
+			})
+		}
+
+		return listing
+	}
+
+	public async fetchPostRevision(revision: number): Promise<ForumRevisionBody> {
+		const json = await this.fetchJson({
+			"revisionId": revision,
+			"moduleName": "forum/sub/ForumPostRevisionModule",
+		}, true)
+
+		if (json.body != 'ok') {
+			throw Error(`Server returned ${json.body}`)
+		}
+
+		return {
+			content: json.content,
+			title: json.title
+		}
 	}
 
 	// high-level api
@@ -724,7 +1125,7 @@ class WikiDot {
 
 	private static fileSizeMatcher = /([0-9]+) bytes/i
 
-	public async fetchFileMeta(file_id: number): Promise<FileMeta> {
+	public async fetchFileMeta(file_id: number) {
 		this.log(`Fetching file meta of ${file_id}`)
 
 		const json = await this.fetchJson({
@@ -747,7 +1148,7 @@ class WikiDot {
 		const uploader = rows[5].querySelectorAll('td')[1]
 		const date = rows[6].querySelectorAll('td')[1]
 
-		const matchAuthor = uploader.querySelector('a')?.attrs['href'].match(WikiDot.usernameMatcher)![1]!
+		const matchAuthor = WikiDot.extractUser(uploader)
 
 		return {
 			file_id: file_id,
@@ -757,7 +1158,7 @@ class WikiDot {
 			size_bytes: parseInt(size.innerText.match(WikiDot.fileSizeMatcher)![1]),
 			mime: mime.innerText.trim(),
 			content: contentType.innerText.trim(),
-			author: matchAuthor ? matchAuthor : null,
+			author: matchAuthor,
 			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!)
 		}
 	}
@@ -801,6 +1202,97 @@ class WikiDot {
 
 	public async workLoop() {
 		await this.initialize()
+
+		if (true) {
+			this.log(`Fetching forums list`)
+			const forums = await this.fetchForumCategories()
+			await this.writeForumMeta(forums)
+
+			for (const forum of forums) {
+				let page = 0
+
+				while (true) {
+					let updated = false
+					this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
+					const threads = await this.fetchThreads(forum.id, page++)
+
+					for (const thread of threads) {
+						const localThread = await this.loadForumThread(thread.id)
+
+						if (localThread == null || localThread.last != thread.last) {
+							// thread metadata is outdated
+							updated = true
+							this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
+
+							const newMeta: LocalForumThread = {
+								title: thread.title,
+								id: thread.id,
+								description: thread.description,
+								last: thread.last,
+								lastUser: thread.lastUser,
+								started: thread.started,
+								startedUser: thread.startedUser,
+								postsNum: thread.postsNum,
+								sticky: thread.sticky,
+								posts: localThread != null ? localThread.posts : []
+							}
+
+							const posts = await this.fetchAllThreadPosts(thread.id)
+
+							const workWithPost = async (post: ForumPost) => {
+								await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
+
+								const localPost: LocalForumPost = {
+									id: post.id,
+									poster: post.poster,
+									stamp: post.stamp,
+									lastEdit: post.lastEdit,
+									lastEditBy: post.lastEditBy,
+									revisions: [],
+									children: []
+								}
+
+								if (post.lastEdit != undefined) {
+									this.log(`Fetching revision list of post ${post.id}`)
+									const revisionList = await this.fetchPostRevisionList(post.id)
+
+									for (const revision of revisionList) {
+										this.log(`Fetching revision ${revision.id} of post ${post.id}`)
+										const revContent = await this.fetchPostRevision(revision.id)
+										await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+
+										localPost.revisions.push({
+											title: revContent.title,
+											author: revision.author,
+											id: revision.id,
+											stamp: revision.stamp
+										})
+									}
+								}
+
+								for (const child of post.children) {
+									localPost.children.push(await workWithPost(child))
+								}
+
+								return localPost
+							}
+
+							for (const post of posts) {
+								const localPost = await workWithPost(post)
+								newMeta.posts.push(localPost)
+								// await this.writeForumPost(post.id, localPost)
+							}
+
+							await this.writeForumThread(forum.id, thread.id, newMeta)
+						}
+					}
+
+					if (threads.length < 20 || !updated) {
+						break
+					}
+				}
+			}
+		}
 
 		let page = this.localMeta.data.last_page
 		const seen = new Map<string, boolean>()
@@ -983,6 +1475,67 @@ class WikiDot {
 	}
 
 	// local I/O
+	public async loadForumCategory(category: number) {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, {encoding: 'utf-8'})
+			return JSON.parse(read) as ForumCategory
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeForumCategory(category: number, value: ForumCategory) {
+		await promises.mkdir(`${this.workingDirectory}/meta/forum/category`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, JSON.stringify(value, null, 4))
+	}
+
+	public async loadForumThread(thread: number) {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/thread/${thread}.json`, {encoding: 'utf-8'})
+			return JSON.parse(read) as LocalForumThread
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeForumThread(category: number, thread: number, value: LocalForumThread) {
+		await promises.mkdir(`${this.workingDirectory}/meta/forum/${category}`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/forum/${category}/${thread}.json`, JSON.stringify(value, null, 4))
+	}
+
+	public async loadForumPost(post: number) {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/post/${post}.json`, {encoding: 'utf-8'})
+			return JSON.parse(read) as LocalForumPost
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeForumPost(post: number, value: LocalForumPost) {
+		await promises.mkdir(`${this.workingDirectory}/meta/forum/post`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/forum/post/${post}.json`, JSON.stringify(value, null, 4))
+	}
+
+	public async loadForumMeta() {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/meta/forum.json`, {encoding: 'utf-8'})
+			return JSON.parse(read) as ForumCategory[]
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeForumMeta(values: ForumCategory[]) {
+		await promises.mkdir(`${this.workingDirectory}/meta/`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/meta/forum.json`, JSON.stringify(values, null, 4))
+	}
+
+	public async writePostRevision(category: number, thread: number, post: number, revision: 'latest' | number, value: string) {
+		await promises.mkdir(`${this.workingDirectory}/forum/${category}/${thread}/${post}/`, {recursive: true})
+		await promises.writeFile(`${this.workingDirectory}/forum/${category}/${thread}/${post}/${revision}.html`, value)
+	}
+
 	public async revisionExists(page: string, revision: number) {
 		try {
 			await promises.stat(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
