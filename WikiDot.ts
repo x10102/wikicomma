@@ -265,6 +265,7 @@ class DiskMeta<T> {
 interface LocalWikiMeta {
 	last_page: number
 	last_pagenation: number
+	full_scan: boolean
 }
 
 interface FileMap {
@@ -294,12 +295,14 @@ class WikiDot {
 
 	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
 		last_page: 0,
+		full_scan: true,
 		last_pagenation: WikiDot.defaultPagenation
 	}, `${this.workingDirectory}/meta/local.json`, v => {
 		if (typeof v != 'object') {
 			v = {}
 		}
 
+		v.full_scan = v.full_scan != undefined ? v.full_scan : false
 		v.last_page = v.last_page != undefined ? v.last_page : 0
 		v.last_pagenation = v.last_pagenation != undefined ? v.last_pagenation : WikiDot.defaultPagenation
 
@@ -796,7 +799,7 @@ class WikiDot {
 		return list
 	}
 
-	public async cachePageMetadata() {
+	public async workLoop() {
 		await this.initialize()
 
 		let page = this.localMeta.data.last_page
@@ -806,14 +809,24 @@ class WikiDot {
 			this.log(`Fetching latest changes on page ${page + 1}`)
 			const changes = await this.fetchChanges(++page, this.localMeta.data.last_pagenation)
 
+			let onceUnseen = false
+			let onceFetch = false
+
 			for (const change of changes) {
-				if (!seen.has(change.name) && !change.name.startsWith('nav:') && !change.name.startsWith('tech:')) {
+				if (!seen.has(change.name)) {
+					onceUnseen = true
+
+					if (change.name.startsWith('nav:') || change.name.startsWith('tech:')) {
+						continue
+					}
+
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
 						let metadata = await this.loadPageMetadata(change.name)
 
 						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined) {
+							onceFetch = true
 							this.log(`Need to renew ${change.name}`)
 
 							const newMeta: PageMeta = {
@@ -951,8 +964,16 @@ class WikiDot {
 				}
 			}
 
-			if (changes.length < this.localMeta.data.last_pagenation) {
+			if (onceUnseen && !onceFetch && this.localMeta.data.full_scan) {
+				this.log(`Finished renewing all changed pages`)
+				this.localMeta.data.last_page = 0
+				this.localMeta.markDirty()
+				break
+			} else if (changes.length < this.localMeta.data.last_pagenation) {
 				this.log(`Reached end of entire wiki history`)
+				this.localMeta.data.full_scan = true
+				this.localMeta.data.last_page = 0
+				this.localMeta.markDirty()
 				break
 			} else {
 				this.localMeta.data.last_page = page
