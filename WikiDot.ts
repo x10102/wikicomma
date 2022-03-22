@@ -563,7 +563,7 @@ class WikiDot {
 			let finish = false
 
 			for (const piece of data) {
-				if (piece.revision < revision) {
+				if (piece.revision <= revision) {
 					finish = true
 					break
 				}
