@@ -22,7 +22,7 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 
 import { encode } from "querystring"
-import { HTTPClient } from './HTTPClient'
+import { HTTPClient, RequestConfig } from './HTTPClient'
 import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises } from 'fs'
 import { promisify } from 'util'
@@ -451,8 +451,25 @@ class WikiDot {
 		])
 	}
 
+	private async loadCookies() {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/http_cookies.json`, {encoding: 'utf-8'})
+			const json = JSON.parse(read)
+			this.client.cookies.load(json)
+		} catch(err) {
+
+		}
+	}
+
+	private async saveCookies() {
+		await promises.mkdir(this.workingDirectory, {recursive: true})
+		const json = this.client.cookies.save()
+		await promises.writeFile(`${this.workingDirectory}/http_cookies.json`, JSON.stringify(json, null, 4))
+	}
+
 	private initialize() {
 		return Promise.allSettled([
+			this.loadCookies(),
 			this.pendingFiles.initialize(),
 			this.pendingPages.initialize(),
 			this.localMeta.initialize(),
@@ -471,6 +488,32 @@ class WikiDot {
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
+
+		let savingCookies = false
+		let timeoutPlaced = false
+
+		this.client.cookies.onCookieAdded = async () => {
+			if (savingCookies) {
+				if (timeoutPlaced) {
+					return
+				}
+
+				timeoutPlaced = true
+
+				setTimeout(() => {
+					timeoutPlaced = false
+					savingCookies = true
+					this.saveCookies()
+					savingCookies = false
+				}, 1000)
+
+				return
+			}
+
+			savingCookies = true
+			this.saveCookies()
+			savingCookies = false
+		}
 	}
 
 	private fetchingToken = false
@@ -488,12 +531,20 @@ class WikiDot {
 			return
 		}
 
-		this.fetchingToken = false
+		await this.initialize()
+
+		this.fetchingToken = true
+
+		if (this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value != undefined) {
+			return
+		}
+
 		await this.client.get(`${this.url}/system:recent-changes`)
+		await this.saveCookies()
 	}
 
 	private async fetch(options: any) {
-		options["wikidot_token7"] = this.client.cookies.get(this.ajaxURL)[0]?.value
+		options["wikidot_token7"] = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
 
 		return await this.client.post(this.ajaxURL.href, {
 			body: encode(options),
@@ -1075,10 +1126,10 @@ class WikiDot {
 		return false
 	}
 
-	private async fetchFileInner(fileMeta: FileMeta, split: string[], recombined: string) {
+	private async fetchFileInner(fileMeta: FileMeta, split: string[], recombined: string, config?: RequestConfig) {
 		this.log(`Fetching file ${fileMeta.url}`)
 
-		await this.client.get(fileMeta.url).then(async buffer => {
+		await this.client.get(fileMeta.url, config).then(async buffer => {
 			await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
 			await promises.writeFile(`${this.workingDirectory}/files/${recombined}`, buffer)
 			this.removePendingFiles(fileMeta.file_id)
@@ -1574,7 +1625,11 @@ class WikiDot {
 						continue
 					}
 
-					this.fetchFileInner(readMeta, split, recombined)
+					this.fetchFileInner(readMeta, split, recombined, {
+						headers: {
+							'Cache-Control': 'no-cache'
+						}
+					})
 				}
 			}
 		}

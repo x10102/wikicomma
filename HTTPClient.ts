@@ -57,7 +57,16 @@ interface RequestConfig {
 
 export {RequestConfig}
 
-class HTTPCookie {
+interface HTTPCookieData {
+	name: string
+	value: string
+	path: string | null
+	domain: string | null
+	expires: Date | null
+	secure: boolean
+}
+
+class HTTPCookie implements HTTPCookieData {
 	public path: string | null = null
 	public domain: string | null = null
 	public expires: Date | null = null
@@ -65,6 +74,26 @@ class HTTPCookie {
 
 	constructor(public name: string, public value: string) {
 
+	}
+
+	public save(): HTTPCookieData {
+		return {
+			value: this.value,
+			name: this.name,
+			path: this.path,
+			domain: this.domain,
+			expires: this.expires,
+			secure: this.secure,
+		}
+	}
+
+	public load(value: HTTPCookieData) {
+		this.value = value.value
+		this.name = value.name
+		this.path = value.path
+		this.domain = value.domain
+		this.expires = value.expires ? new Date(value.expires) : null
+		this.secure = value.secure
 	}
 }
 
@@ -80,9 +109,30 @@ class HTTPError {
 
 class CookieJar {
 	public cookies: HTTPCookie[] = []
+	public onCookieAdded?: () => void
 
 	constructor() {
 
+	}
+
+	public save() {
+		const listing = []
+
+		for (const cookie of this.cookies) {
+			listing.push(cookie.save())
+		}
+
+		return listing
+	}
+
+	public load(values: HTTPCookieData[]) {
+		this.cookies = []
+
+		for (const cookie of values) {
+			const construct = new HTTPCookie('', '')
+			construct.load(cookie)
+			this.cookies.push(construct)
+		}
 	}
 
 	public static domainMatcher = /https?:\/\/(.*?)(\/|$)/i
@@ -106,6 +156,16 @@ class CookieJar {
 		}
 
 		return result
+	}
+
+	public getSpecific(url: urlModule.URL, name: string) {
+		for (const cookie of this.get(url)) {
+			if (cookie.name == name) {
+				return cookie
+			}
+		}
+
+		return null
 	}
 
 	public build(url: urlModule.URL): string {
@@ -183,6 +243,11 @@ class CookieJar {
 		}
 
 		this.cookies.push(cookieConstruct)
+
+		if (this.onCookieAdded != undefined) {
+			this.onCookieAdded()
+		}
+
 		return true
 	}
 }
