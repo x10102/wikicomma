@@ -1203,97 +1203,6 @@ class WikiDot {
 	public async workLoop() {
 		await this.initialize()
 
-		if (true) {
-			this.log(`Fetching forums list`)
-			const forums = await this.fetchForumCategories()
-			await this.writeForumMeta(forums)
-
-			for (const forum of forums) {
-				let page = 0
-
-				while (true) {
-					let updated = false
-					this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
-					const threads = await this.fetchThreads(forum.id, page++)
-
-					for (const thread of threads) {
-						const localThread = await this.loadForumThread(thread.id)
-
-						if (localThread == null || localThread.last != thread.last) {
-							// thread metadata is outdated
-							updated = true
-							this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
-
-							const newMeta: LocalForumThread = {
-								title: thread.title,
-								id: thread.id,
-								description: thread.description,
-								last: thread.last,
-								lastUser: thread.lastUser,
-								started: thread.started,
-								startedUser: thread.startedUser,
-								postsNum: thread.postsNum,
-								sticky: thread.sticky,
-								posts: localThread != null ? localThread.posts : []
-							}
-
-							const posts = await this.fetchAllThreadPosts(thread.id)
-
-							const workWithPost = async (post: ForumPost) => {
-								await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
-
-								const localPost: LocalForumPost = {
-									id: post.id,
-									poster: post.poster,
-									stamp: post.stamp,
-									lastEdit: post.lastEdit,
-									lastEditBy: post.lastEditBy,
-									revisions: [],
-									children: []
-								}
-
-								if (post.lastEdit != undefined) {
-									this.log(`Fetching revision list of post ${post.id}`)
-									const revisionList = await this.fetchPostRevisionList(post.id)
-
-									for (const revision of revisionList) {
-										this.log(`Fetching revision ${revision.id} of post ${post.id}`)
-										const revContent = await this.fetchPostRevision(revision.id)
-										await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
-
-										localPost.revisions.push({
-											title: revContent.title,
-											author: revision.author,
-											id: revision.id,
-											stamp: revision.stamp
-										})
-									}
-								}
-
-								for (const child of post.children) {
-									localPost.children.push(await workWithPost(child))
-								}
-
-								return localPost
-							}
-
-							for (const post of posts) {
-								const localPost = await workWithPost(post)
-								newMeta.posts.push(localPost)
-								// await this.writeForumPost(post.id, localPost)
-							}
-
-							await this.writeForumThread(forum.id, thread.id, newMeta)
-						}
-					}
-
-					if (threads.length < 20 || !updated) {
-						break
-					}
-				}
-			}
-		}
-
 		let page = this.localMeta.data.last_page
 		const seen = new Map<string, boolean>()
 
@@ -1472,6 +1381,97 @@ class WikiDot {
 				this.localMeta.markDirty()
 			}
 		}
+
+		this.log(`Fetching forums list`)
+		const forums = await this.fetchForumCategories()
+		await this.writeForumMeta(forums)
+
+		for (const forum of forums) {
+			let page = 0
+
+			while (true) {
+				let updated = false
+				this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
+				const threads = await this.fetchThreads(forum.id, page++)
+
+				for (const thread of threads) {
+					const localThread = await this.loadForumThread(forum.id, thread.id)
+
+					if (localThread == null || localThread.last != thread.last) {
+						// thread metadata is outdated
+						updated = true
+						this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
+
+						const newMeta: LocalForumThread = {
+							title: thread.title,
+							id: thread.id,
+							description: thread.description,
+							last: thread.last,
+							lastUser: thread.lastUser,
+							started: thread.started,
+							startedUser: thread.startedUser,
+							postsNum: thread.postsNum,
+							sticky: thread.sticky,
+							//posts: localThread != null ? localThread.posts : []
+							posts: []
+						}
+
+						const posts = await this.fetchAllThreadPosts(thread.id)
+
+						const workWithPost = async (post: ForumPost) => {
+							await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
+
+							const localPost: LocalForumPost = {
+								id: post.id,
+								poster: post.poster,
+								stamp: post.stamp,
+								lastEdit: post.lastEdit,
+								lastEditBy: post.lastEditBy,
+								revisions: [],
+								children: []
+							}
+
+							if (post.lastEdit != undefined) {
+								this.log(`Fetching revision list of post ${post.id}`)
+								const revisionList = await this.fetchPostRevisionList(post.id)
+
+								for (const revision of revisionList) {
+									this.log(`Fetching revision ${revision.id} of post ${post.id}`)
+									const revContent = await this.fetchPostRevision(revision.id)
+									await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+
+									localPost.revisions.push({
+										title: revContent.title,
+										author: revision.author,
+										id: revision.id,
+										stamp: revision.stamp
+									})
+								}
+							}
+
+							for (const child of post.children) {
+								localPost.children.push(await workWithPost(child))
+							}
+
+							return localPost
+						}
+
+						for (const post of posts) {
+							const localPost = await workWithPost(post)
+							newMeta.posts.push(localPost)
+							// await this.writeForumPost(post.id, localPost)
+						}
+
+						await this.writeForumThread(forum.id, thread.id, newMeta)
+					}
+				}
+
+				if (threads.length < 20 || !updated) {
+					break
+				}
+			}
+		}
+
 	}
 
 	// local I/O
@@ -1489,9 +1489,9 @@ class WikiDot {
 		await promises.writeFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, JSON.stringify(value, null, 4))
 	}
 
-	public async loadForumThread(thread: number) {
+	public async loadForumThread(category: number, thread: number) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/thread/${thread}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/${category}/${thread}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as LocalForumThread
 		} catch(err) {
 			return null
