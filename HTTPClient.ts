@@ -196,7 +196,7 @@ class HTTPClient {
 
 	public cookies = new CookieJar()
 
-	constructor(private connections = 16) {
+	constructor(private connections = 3) {
 		this.httpsagent = new https.Agent({
 			keepAlive: true,
 			keepAliveMsecs: 20000,
@@ -277,6 +277,7 @@ class HTTPClient {
 						}
 					} catch(err) {
 						value.reject(new HTTPError(response.statusCode, String(err), 'Location URL is invalid: ' + response.headers.location))
+						// setTimeout(() => this.work(), 100)
 						this.work()
 						return
 					}
@@ -285,8 +286,10 @@ class HTTPClient {
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.queue.push(value)
 
+					// setTimeout(() => this.work(), 100)
 					this.work()
 				} else {
+					// setTimeout(() => this.work(), 100)
 					this.work()
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
 				}
@@ -307,6 +310,7 @@ class HTTPClient {
 			response.on('error', (err) => {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
+				// setTimeout(() => this.work(), 100)
 				this.work()
 				value.reject(err)
 			})
@@ -314,7 +318,6 @@ class HTTPClient {
 			response.on('end', async () => {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
-				this.work()
 
 				let size = 0
 
@@ -355,6 +358,9 @@ class HTTPClient {
 				} else {
 					value.reject(new HTTPError(response.statusCode, newbuff, 'Server returned ' + response.statusCode))
 				}
+
+				// setTimeout(() => this.work(), 100)
+				this.work()
 			})
 		}
 
@@ -371,6 +377,7 @@ class HTTPClient {
 
 			this.workingConnections--
 			this.working = this.workingConnections != 0
+			// setTimeout(() => this.work(), 100)
 			this.work()
 			value.reject(err)
 		})

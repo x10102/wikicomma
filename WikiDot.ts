@@ -1028,56 +1028,88 @@ class WikiDot {
 		}
 	}
 
+	private static splitFilePath(path: string): [string[], string, string] {
+		const split = path.split('/')
+
+		for (const key in split) {
+			split[key] = reencodeComponent(split[key])
+		}
+
+		if (split.length == 1) {
+			split.unshift('~')
+		}
+
+		const last = split.splice(split.length - 1)[0]
+
+		return [split, last, `${split.join('/')}/${last}`]
+	}
+
+	private static splitFilePathRaw(url: string): [string, string[], string, string] | null {
+		const match = url.match(this.localFileMatch)
+
+		if (match == null) {
+			return null
+		}
+
+		const [split, last, recombined] = this.splitFilePath(match[1])
+		return [match[1], split, last, recombined]
+	}
+
+	private writeToFileMap(fileMeta: FileMeta, split: string[], last: string) {
+		this.fileMap.data[fileMeta.file_id] = {
+			url: fileMeta.url,
+			path: `${split.join('/')}/${last}`
+		}
+
+		this.fileMap.markDirty()
+	}
+
+	public async fileExists(recombined: string) {
+		try {
+			await promises.stat(`${this.workingDirectory}/files/${recombined}`)
+			return true
+		} catch(err) {
+
+		}
+
+		return false
+	}
+
+	private async fetchFileInner(fileMeta: FileMeta, split: string[], recombined: string) {
+		this.log(`Fetching file ${fileMeta.url}`)
+
+		await this.client.get(fileMeta.url).then(async buffer => {
+			await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
+			await promises.writeFile(`${this.workingDirectory}/files/${recombined}`, buffer)
+			this.removePendingFiles(fileMeta.file_id)
+		}).catch(err => {
+			this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
+			this.pushPendingFiles(fileMeta.file_id)
+		})
+	}
+
 	public async fetchFilesFor(page_id: number) {
 		await this.initialize()
 
 		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
-			const match = fileMeta.url.match(WikiDot.localFileMatch)!
-			await this.writeFileMeta(match[1], fileMeta)
+			const match = WikiDot.splitFilePathRaw(fileMeta.url)
 
 			if (match != null) {
-				if (this.downloadingFiles.has(match[1])) {
+				const [matched, split, last, recombined] = match
+				await this.writeFileMeta(matched, fileMeta)
+
+				if (this.downloadingFiles.has(matched)) {
 					continue
 				}
 
-				this.downloadingFiles.set(match[1], true)
+				this.downloadingFiles.set(matched, true)
+				this.writeToFileMap(fileMeta, split, last)
 
-				const split = match[1].split('/')
-
-				for (const key in split) {
-					split[key] = reencodeComponent(split[key])
+				if (await this.fileExists(recombined)) {
+					continue
 				}
 
-				if (split.length == 1) {
-					split.unshift('~')
-				}
-
-				const last = split.splice(split.length - 1)[0]
-
-				this.fileMap.data[fileMeta.file_id] = {
-					url: fileMeta.url,
-					path: `${split.join('/')}/${last}`
-				}
-
-				this.fileMap.markDirty()
-
-				try {
-					await promises.stat(`${this.workingDirectory}/files/${split.join('/')}/${last}`)
-					break
-				} catch(err) {
-
-				}
-
-				this.log(`Fetching file ${fileMeta.url}`)
-
-				this.client.get(fileMeta.url).then(async buffer => {
-					await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
-					await promises.writeFile(`${this.workingDirectory}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
-					this.removePendingFiles(fileMeta.file_id)
-				}).catch(err => {
-					this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
-					this.pushPendingFiles(fileMeta.file_id)
-				})
+				this.fetchFileInner(fileMeta, split, recombined)
 			}
 		}
 	}
@@ -1500,6 +1532,52 @@ class WikiDot {
 		// if we didn't finish full scan then we would have to do relatively full scan of all forum categories
 		// but if we managed to reach the end, then we gonna have fast index!
 		await this.writeForumMeta(forums)
+
+		if (this.pendingFiles.data.length != 0) {
+			this.log(`Fetching pending files`)
+
+			for (let i = this.pendingFiles.data.length - 1; i >= 0; i--) {
+				const id = this.pendingFiles.data[i]
+				let mapped = this.fileMap.data[id]
+
+				if (mapped == undefined) {
+					this.log(`Re-fetching file meta of ${id}`)
+					const fetchedMeta = await this.fetchFileMeta(id)
+					const match = WikiDot.splitFilePathRaw(fetchedMeta.url)
+
+					if (match != null) {
+						const [matched, split, last] = match
+						this.writeToFileMap(fetchedMeta, split, last)
+						await this.writeFileMeta(matched, fetchedMeta)
+						mapped = this.fileMap.data[id]
+					}
+				}
+
+				if (mapped == undefined) {
+					this.log(`Failed to map file meta ${id}`)
+					continue
+				}
+
+				const readMeta = await this.loadFileMeta(mapped.path)
+
+				if (readMeta == null) {
+					this.log(`Unexpected missing metadata of file ${id}`)
+					continue
+				}
+
+				const match = WikiDot.splitFilePathRaw(readMeta.url)
+
+				if (match != null) {
+					const [matched, split, last, recombined] = match
+
+					if (await this.fileExists(recombined)) {
+						continue
+					}
+
+					this.fetchFileInner(readMeta, split, recombined)
+				}
+			}
+		}
 	}
 
 	// local I/O
@@ -1592,9 +1670,9 @@ class WikiDot {
 		await promises.writeFile(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
 	}
 
-	public async readFileMeta(path: string) {
+	public async loadFileMeta(path: string) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/files/${path}`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this.workingDirectory}/meta/files/${path}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as FileMeta
 		} catch(err) {
 			return null
@@ -1602,20 +1680,9 @@ class WikiDot {
 	}
 
 	public async writeFileMeta(path: string, meta: FileMeta) {
-		const split = path.split('/')
-
-		for (const key in split) {
-			split[key] = reencodeComponent(split[key])
-		}
-
-		if (split.length == 1) {
-			split.unshift('~')
-		}
-
-		const last = split.splice(split.length - 1)[0]
-
+		const [split, last, recombined] = WikiDot.splitFilePath(path)
 		await promises.mkdir(`${this.workingDirectory}/meta/files/${split.join('/')}`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/files/${split.join('/')}/${last}.json`, JSON.stringify(meta, null, 4))
+		await promises.writeFile(`${this.workingDirectory}/meta/files/${recombined}.json`, JSON.stringify(meta, null, 4))
 	}
 }
 
