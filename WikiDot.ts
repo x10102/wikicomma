@@ -1383,10 +1383,30 @@ class WikiDot {
 		}
 
 		this.log(`Fetching forums list`)
+		let localForums = await this.loadForumMeta()
+
+		if (localForums == null) {
+			localForums = []
+		}
+
 		const forums = await this.fetchForumCategories()
-		await this.writeForumMeta(forums)
 
 		for (const forum of forums) {
+			let shouldContinue = true
+
+			for (const localForum of localForums) {
+				// Nothing changed
+				// TODO: Is this really the case IF someone edits their post???
+				if (localForum.id == forum.id && localForum.last == forum.last) {
+					shouldContinue = false
+					break
+				}
+			}
+
+			if (!shouldContinue) {
+				continue
+			}
+
 			let page = 0
 
 			while (true) {
@@ -1397,6 +1417,9 @@ class WikiDot {
 				for (const thread of threads) {
 					const localThread = await this.loadForumThread(forum.id, thread.id)
 
+					// TODO: IF we have meta, and it says that we fetched entire thread
+					// and it hasn't changed... is this really the case?
+					// about post edits, are they reflected anywhere???
 					if (localThread == null || localThread.last != thread.last) {
 						// thread metadata is outdated
 						updated = true
@@ -1472,6 +1495,11 @@ class WikiDot {
 			}
 		}
 
+		this.log(`Fetched all forums!`)
+
+		// if we didn't finish full scan then we would have to do relatively full scan of all forum categories
+		// but if we managed to reach the end, then we gonna have fast index!
+		await this.writeForumMeta(forums)
 	}
 
 	// local I/O
