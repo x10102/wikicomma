@@ -1716,7 +1716,9 @@ export class WikiDot {
 			const build = []
 
 			for (const piece of list) {
-				build.push(piece.file)
+				if (piece.file != undefined) { // ???
+					build.push(piece.file)
+				}
 			}
 
 			return build
