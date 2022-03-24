@@ -31,11 +31,11 @@ const punzip = promisify(unzip)
 const pbrotliDecompress = promisify(brotliDecompress)
 const pinflate = promisify(inflate)
 
-interface Headers {
+export interface Headers {
 	[key: string]: string
 }
 
-interface QueueTable {
+export interface QueueTable {
 	onStart?: (response: http.IncomingMessage) => void
 	url: urlModule.URL
 	body?: string | Buffer
@@ -47,17 +47,13 @@ interface QueueTable {
 	resolve: (value: Buffer) => void
 }
 
-export {QueueTable, Headers}
-
-interface RequestConfig {
+export interface RequestConfig {
 	headers?: Headers
 	onStart?: (response: http.IncomingMessage) => void
 	body?: string | Buffer
 }
 
-export {RequestConfig}
-
-interface HTTPCookieData {
+export interface HTTPCookieData {
 	name: string
 	value: string
 	path: string | null
@@ -66,7 +62,7 @@ interface HTTPCookieData {
 	secure: boolean
 }
 
-class HTTPCookie implements HTTPCookieData {
+export class HTTPCookie implements HTTPCookieData {
 	public path: string | null = null
 	public domain: string | null = null
 	public expires: Date | null = null
@@ -107,7 +103,7 @@ class HTTPError {
 	}
 }
 
-class CookieJar {
+export class CookieJar {
 	public cookies: HTTPCookie[] = []
 	public onCookieAdded?: () => void
 
@@ -252,7 +248,7 @@ class CookieJar {
 	}
 }
 
-class HTTPClient {
+export class HTTPClient {
 	private httpagent: http.Agent
 	private httpsagent: https.Agent
 	private queue: QueueTable[] = []
@@ -508,5 +504,3 @@ class HTTPClient {
 		})
 	}
 }
-
-export {HTTPClient, CookieJar, HTTPCookie}

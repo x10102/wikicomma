@@ -27,6 +27,8 @@ import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises } from 'fs'
 import { promisify } from 'util'
 import { unescape } from 'html-escaper'
+import Seven from 'node-7z'
+import { addZipFiles, listZipFiles } from "./7z-helper"
 
 const sleep = promisify(setTimeout)
 
@@ -337,7 +339,7 @@ interface PendingRevisions {
 	[key: string]: number
 }
 
-class WikiDot {
+export class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
 	}
@@ -1399,11 +1401,13 @@ class WikiDot {
 
 						let fetchFilesOnce = false
 						const revisionsToFetch: PageRevision[] = []
+						const localRevs = await this.revisionList(change.name)
 
 						for (const key in metadata.revisions) {
 							const rev = metadata.revisions[key]
 
-							if (!await this.revisionExists(change.name, rev.revision)) {
+							//if (!await this.revisionExists(change.name, rev.revision)) {
+							if (!localRevs.includes(rev.revision)) {
 								if (!fetchFilesOnce && metadata.page_id != undefined) {
 									fetchFilesOnce = true
 									this.fetchFilesFor(metadata.page_id)
@@ -1633,6 +1637,15 @@ class WikiDot {
 				}
 			}
 		}
+
+		this.log(`Compressing page revisions`)
+
+		for (const name of await promises.readdir(`${this.workingDirectory}/pages/`)) {
+			// hidden/system files start with dot
+			if (!name.startsWith('.') && (await promises.stat(`${this.workingDirectory}/pages/${name}`)).isDirectory()) {
+				await this.compressRevisions(name)
+			}
+		}
 	}
 
 	// local I/O
@@ -1697,12 +1710,107 @@ class WikiDot {
 		await promises.writeFile(`${this.workingDirectory}/forum/${category}/${thread}/${post}/${revision}.html`, value)
 	}
 
+	private async _revisionList7z(page: string) {
+		try {
+			const list = await listZipFiles(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
+			const build = []
+
+			for (const piece of list) {
+				build.push(piece.file)
+			}
+
+			return build
+		} catch(err) {
+			return []
+		}
+	}
+
+	private async _revisionListFiles(page: string) {
+		try {
+			return await promises.readdir(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/`)
+		} catch(err) {
+			return []
+		}
+	}
+
+	public revisionList(page: string): Promise<number[]> {
+		return new Promise((resolve, reject) => {
+			Promise.allSettled([this._revisionList7z(page), this._revisionListFiles(page)]).then(data => {
+				const list = []
+
+				for (const piece of data) {
+					if (piece.status == 'fulfilled') {
+						for (const name of piece.value) {
+							list.push(parseInt(name.substring(0, name.length - 4)))
+						}
+					}
+				}
+
+				resolve(list)
+			})
+		})
+	}
+
 	public async revisionExists(page: string, revision: number) {
 		try {
 			await promises.stat(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
 			return true
 		} catch(err) {
 			return false
+		}
+	}
+
+	private async compressRevisions(normalizedName: string) {
+		const listing = await promises.readdir(`${this.workingDirectory}/pages/${normalizedName}/`)
+		const txts = []
+		let shouldBeEmpty = true
+
+		for (const name of listing) {
+			if (!name.endsWith('.txt')) {
+				shouldBeEmpty = false
+				continue
+			}
+
+			const num = parseInt(name.substring(0, name.length - 4))
+
+			// not a number
+			if (num != num) {
+				shouldBeEmpty = false
+				continue
+			}
+
+			const path = `${this.workingDirectory}/pages/${normalizedName}/${name}`
+			const stat = await promises.stat(path)
+
+			if (!stat.isFile()) {
+				this.error(`${path} is not a file?`)
+				shouldBeEmpty = false
+				continue
+			}
+
+			txts.push(path)
+		}
+
+		if (txts.length != 0) {
+			this.log(`Compressing revisions of ${normalizedName}`)
+
+			await addZipFiles(
+				`${this.workingDirectory}/pages/${normalizedName}.7z`,
+				// txts,
+				// TODO: ENAMETOOLONG, if it is really needed (due to conditions above)
+				// if there are many txt files.
+				`${this.workingDirectory}/pages/${normalizedName}/*.txt`
+			)
+
+			for (const txt of txts) {
+				await promises.unlink(txt)
+			}
+		}
+
+		if (shouldBeEmpty) {
+			await promises.rm(`${this.workingDirectory}/pages/${normalizedName}/`, {recursive: true, force: false})
+		} else {
+			this.log(`${this.workingDirectory}/pages/${normalizedName}/ is not empty, not removing it.`)
 		}
 	}
 
@@ -1740,5 +1848,3 @@ class WikiDot {
 		await promises.writeFile(`${this.workingDirectory}/meta/files/${recombined}.json`, JSON.stringify(meta, null, 4))
 	}
 }
-
-export {WikiDot}
