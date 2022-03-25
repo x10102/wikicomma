@@ -306,6 +306,10 @@ export class HTTPClient {
 			}
 		}
 
+		if (value.body != undefined) {
+			params.headers!['content-length'] = value.body.length
+		}
+
 		this.workingConnections++
 		this.working = this.workingConnections != 0
 
