@@ -1451,7 +1451,7 @@ export class WikiDot {
 						this.removePendingPages(change.name)
 
 						if (changes) {
-							await this.compressRevisions(change.name)
+							await this.compressRevisions(WikiDot.normalizeName(change.name))
 						}
 					}
 				}
