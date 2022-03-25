@@ -679,7 +679,8 @@ export class WikiDot {
 			const data = await this.fetchPageChangeList(page_id, ++page)
 			listing.push(...data)
 
-			if (data.length < WikiDot.defaultPagenation) {
+			//if (data.length < WikiDot.defaultPagenation) {
+			if (data.length == 0) {
 				break
 			}
 		}
@@ -705,7 +706,8 @@ export class WikiDot {
 				listing.push(piece)
 			}
 
-			if (data.length < WikiDot.defaultPagenation || finish) {
+			//if (data.length < WikiDot.defaultPagenation || finish) {
+			if (data.length == 0 || finish) {
 				break
 			}
 		}
@@ -864,7 +866,7 @@ export class WikiDot {
 			const fetch = await this.fetchThreads(category, ++page)
 			listing.push(...fetch)
 
-			if (fetch.length < 20) {
+			if (fetch.length == 0) {
 				break
 			}
 		}
@@ -889,7 +891,7 @@ export class WikiDot {
 				listing.push(fthread)
 			}
 
-			if (fetch.length < 20 || finish) {
+			if (fetch.length == 0 || finish) {
 				break
 			}
 		}
@@ -1462,7 +1464,8 @@ export class WikiDot {
 				this.localMeta.data.last_page = 0
 				this.localMeta.markDirty()
 				break
-			} else if (changes.length < this.localMeta.data.last_pagenation) {
+			//} else if (changes.length < this.localMeta.data.last_pagenation) {
+			} else if (changes.length == 0) {
 				this.log(`Reached end of entire wiki history`)
 				this.localMeta.data.full_scan = true
 				this.localMeta.data.last_page = 0
@@ -1581,7 +1584,9 @@ export class WikiDot {
 					}
 				}
 
-				if (threads.length < 20 || !updated) {
+				console.log(threads.length)
+				//if (threads.length < 20 || !updated) {
+				if (threads.length == 0 || !updated) {
 					break
 				}
 			}

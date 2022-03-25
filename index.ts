@@ -17,8 +17,12 @@ interface DaemonConfig {
 		process.exit(1)
 	}
 
-	for (const {name, url} of config.wikis) {
+	for (let {name, url} of config.wikis) {
 		try {
+			if (url.endsWith('/')) { // Some of wikidot parts don't like double slash
+				url = url.substring(0, url.length - 1)
+			}
+
 			const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`)
 			await wiki.fetchToken()
 			await wiki.workLoop()
