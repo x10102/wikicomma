@@ -1584,7 +1584,6 @@ export class WikiDot {
 					}
 				}
 
-				console.log(threads.length)
 				//if (threads.length < 20 || !updated) {
 				if (threads.length == 0 || !updated) {
 					break
