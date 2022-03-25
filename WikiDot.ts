@@ -1417,6 +1417,7 @@ export class WikiDot {
 							}
 						}
 
+						const changes = revisionsToFetch.length != 0
 						flipArray(revisionsToFetch)
 
 						const worker = async () => {
@@ -1448,6 +1449,10 @@ export class WikiDot {
 						])
 
 						this.removePendingPages(change.name)
+
+						if (changes) {
+							await this.compressRevisions(change.name)
+						}
 					}
 				}
 			}
