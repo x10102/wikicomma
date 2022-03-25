@@ -381,7 +381,7 @@ export class WikiDot {
 
 	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
 		last_page: 0,
-		full_scan: true,
+		full_scan: false,
 		last_pagenation: WikiDot.defaultPagenation
 	}, `${this.workingDirectory}/meta/local.json`, v => {
 		if (typeof v != 'object') {
