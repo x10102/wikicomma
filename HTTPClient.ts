@@ -42,6 +42,7 @@ export interface QueueTable {
 	headers?: Headers
 	method: 'POST' | 'GET'
 	https: boolean
+	followRedirects: boolean
 	agent: http.Agent | https.Agent
 	reject: (err?: any) => void
 	resolve: (value: Buffer) => void
@@ -51,6 +52,7 @@ export interface RequestConfig {
 	headers?: Headers
 	onStart?: (response: http.IncomingMessage) => void
 	body?: string | Buffer
+	followRedirects?: boolean
 }
 
 export interface HTTPCookieData {
@@ -332,7 +334,7 @@ export class HTTPClient {
 				this.workingConnections--
 				this.working = this.workingConnections != 0
 
-				if (response.headers.location) {
+				if (response.headers.location && value.followRedirects) {
 					// redirect, it might also switch protocols
 					value.onStart = () => {}
 
@@ -478,6 +480,7 @@ export class HTTPClient {
 					reject: reject,
 					resolve: resolve,
 					body: config.body,
+					followRedirects: config.followRedirects != undefined ? config.followRedirects : true,
 					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent
 				})
 			}
@@ -501,6 +504,7 @@ export class HTTPClient {
 					https: urlobj.protocol == 'https:',
 					headers: config.headers,
 					onStart: config.onStart,
+					followRedirects: config.followRedirects != undefined ? config.followRedirects : true,
 					reject: reject,
 					resolve: resolve,
 					body: config.body,

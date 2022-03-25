@@ -541,7 +541,7 @@ export class WikiDot {
 			return
 		}
 
-		await this.client.get(`${this.url}/system:recent-changes`)
+		await this.client.get(`${this.url}/system:recent-changes`, {followRedirects: false})
 		await this.saveCookies()
 	}
 
@@ -553,7 +553,9 @@ export class WikiDot {
 
 			headers: {
 				"Content-Type": "application/x-www-form-urlencoded"
-			}
+			},
+
+			followRedirects: false
 		})
 	}
 
@@ -716,7 +718,7 @@ export class WikiDot {
 	}
 
 	public async fetchGeneric(page: string) {
-		const result = await this.client.get(`${this.url}/${page}`)
+		const result = await this.client.get(`${this.url}/${page}`, {followRedirects: false})
 		const html = parse(result.toString('utf-8'))
 		const meta: GenericPageData = {}
 
@@ -1352,8 +1354,8 @@ export class WikiDot {
 											changes = await this.fetchPageChangeListAll(pageMeta.page_id)
 											break
 										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 60 seconds`)
-											await sleep(60_000)
+											this.log(`Encountered ${err}, sleeping for 10 seconds`)
+											await sleep(10_000)
 										}
 									}
 
@@ -1376,8 +1378,8 @@ export class WikiDot {
 											changes = await this.fetchPageChangeListAllUntil(pageMeta.page_id, metadata.last_revision)
 											break
 										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 60 seconds`)
-											await sleep(60_000)
+											this.log(`Encountered ${err}, sleeping for 10 seconds`)
+											await sleep(10_000)
 										}
 									}
 
