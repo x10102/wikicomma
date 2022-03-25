@@ -18,8 +18,13 @@ interface DaemonConfig {
 	}
 
 	for (const {name, url} of config.wikis) {
-		const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`)
-		await wiki.fetchToken()
-		await wiki.workLoop()
+		try {
+			const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`)
+			await wiki.fetchToken()
+			await wiki.workLoop()
+		} catch(err) {
+			console.error(`Fetching wiki ${name} failed`)
+			console.error(err)
+		}
 	}
 })()
