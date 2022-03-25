@@ -1339,7 +1339,7 @@ export class WikiDot {
 							if (pageMeta.page_id != undefined) {
 								newMeta.page_id = pageMeta.page_id
 
-								if (newMeta.rating != undefined)
+								if (pageMeta.rating != undefined)
 									newMeta.rating = pageMeta.rating
 
 								if (metadata == null) {
