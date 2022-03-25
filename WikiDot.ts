@@ -1507,7 +1507,7 @@ export class WikiDot {
 			while (true) {
 				let updated = false
 				this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
-				const threads = await this.fetchThreads(forum.id, page++)
+				const threads = await this.fetchThreads(forum.id, ++page)
 
 				for (const thread of threads) {
 					const localThread = await this.loadForumThread(forum.id, thread.id)
