@@ -257,15 +257,21 @@ export class HTTPClient {
 
 	public cookies = new CookieJar()
 
-	constructor(private connections = 3) {
+	constructor(private connections = 8) {
 		this.httpsagent = new https.Agent({
 			keepAlive: true,
-			keepAliveMsecs: 20000,
+			keepAliveMsecs: 10000,
+			maxTotalSockets: connections,
+			maxFreeSockets: connections,
+			maxSockets: connections
 		})
 
 		this.httpagent = new http.Agent({
 			keepAlive: true,
-			keepAliveMsecs: 20000,
+			keepAliveMsecs: 10000,
+			maxTotalSockets: connections,
+			maxFreeSockets: connections,
+			maxSockets: connections
 		})
 	}
 
