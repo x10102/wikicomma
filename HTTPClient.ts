@@ -35,7 +35,7 @@ export interface Headers {
 	[key: string]: string
 }
 
-export interface QueueTable {
+export interface BakedRequest {
 	onStart?: (response: http.IncomingMessage) => void
 	url: urlModule.URL
 	body?: string | Buffer
@@ -251,43 +251,29 @@ export class CookieJar {
 }
 
 export class HTTPClient {
-	private httpagent: http.Agent
-	private httpsagent: https.Agent
-	private queue: QueueTable[] = []
-	private working = false
-	private workingConnections = 0
-
 	public cookies = new CookieJar()
 
+	private httpsagent = new https.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 10000,
+		maxTotalSockets: this.connections,
+		maxFreeSockets: this.connections,
+		maxSockets: this.connections
+	})
+
+	private httpagent = new http.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 10000,
+		maxTotalSockets: this.connections,
+		maxFreeSockets: this.connections,
+		maxSockets: this.connections
+	})
+
 	constructor(private connections = 8) {
-		this.httpsagent = new https.Agent({
-			keepAlive: true,
-			keepAliveMsecs: 10000,
-			maxTotalSockets: connections,
-			maxFreeSockets: connections,
-			maxSockets: connections
-		})
 
-		this.httpagent = new http.Agent({
-			keepAlive: true,
-			keepAliveMsecs: 10000,
-			maxTotalSockets: connections,
-			maxFreeSockets: connections,
-			maxSockets: connections
-		})
 	}
 
-	public get queueSize() {
-		return this.queue.length
-	}
-
-	public workLoop() {
-		const value = this.queue.pop()
-
-		if (!value) {
-			return
-		}
-
+	private handleRequest(value: BakedRequest) {
 		const buildCookie = this.cookies.build(value.url)
 
 		const params: http.RequestOptions = {
@@ -318,9 +304,6 @@ export class HTTPClient {
 			params.headers!['content-length'] = value.body.length
 		}
 
-		this.workingConnections++
-		this.working = this.workingConnections != 0
-
 		let finished = false
 
 		const callback = (response: http.IncomingMessage) => {
@@ -331,9 +314,6 @@ export class HTTPClient {
 			}
 
 			if (response.statusCode == 301 || response.statusCode == 302) {
-				this.workingConnections--
-				this.working = this.workingConnections != 0
-
 				if (response.headers.location && value.followRedirects) {
 					// redirect, it might also switch protocols
 					value.onStart = () => {}
@@ -350,20 +330,13 @@ export class HTTPClient {
 						}
 					} catch(err) {
 						value.reject(new HTTPError(response.statusCode, String(err), 'Location URL is invalid: ' + response.headers.location))
-						// setTimeout(() => this.work(), 100)
-						this.work()
 						return
 					}
 
 					value.https = value.url.protocol == 'https:'
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
-					this.queue.push(value)
-
-					// setTimeout(() => this.work(), 100)
-					this.work()
+					this.handleRequest(value)
 				} else {
-					// setTimeout(() => this.work(), 100)
-					this.work()
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
 				}
 
@@ -381,17 +354,10 @@ export class HTTPClient {
 			})
 
 			response.on('error', (err) => {
-				this.workingConnections--
-				this.working = this.workingConnections != 0
-				// setTimeout(() => this.work(), 100)
-				this.work()
 				value.reject(err)
 			})
 
 			response.on('end', async () => {
-				this.workingConnections--
-				this.working = this.workingConnections != 0
-
 				let size = 0
 
 				for (const buff of memcache) {
@@ -431,9 +397,6 @@ export class HTTPClient {
 				} else {
 					value.reject(new HTTPError(response.statusCode, newbuff, 'Server returned ' + response.statusCode))
 				}
-
-				// setTimeout(() => this.work(), 100)
-				this.work()
 			})
 		}
 
@@ -448,20 +411,10 @@ export class HTTPClient {
 				return
 			}
 
-			this.workingConnections--
-			this.working = this.workingConnections != 0
-			// setTimeout(() => this.work(), 100)
-			this.work()
 			value.reject(err)
 		})
 
 		request.end()
-	}
-
-	public work() {
-		while (this.workingConnections < this.connections && this.queue.length != 0) {
-			this.workLoop()
-		}
 	}
 
 	public get(url: string, config: RequestConfig = {}): Promise<Buffer> {
@@ -471,7 +424,7 @@ export class HTTPClient {
 			if (urlobj.protocol != 'https:' && urlobj.protocol != 'http:') {
 				throw new TypeError('Protocol is not supported: ' + urlobj.protocol)
 			} else {
-				this.queue.push({
+				this.handleRequest({
 					url: urlobj,
 					method: 'GET',
 					https: urlobj.protocol == 'https:',
@@ -484,10 +437,6 @@ export class HTTPClient {
 					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent
 				})
 			}
-
-			if (!this.working) {
-				this.work()
-			}
 		})
 	}
 
@@ -498,7 +447,7 @@ export class HTTPClient {
 			if (urlobj.protocol != 'https:' && urlobj.protocol != 'http:') {
 				throw new TypeError('Protocol is not supported: ' + urlobj.protocol)
 			} else {
-				this.queue.push({
+				this.handleRequest({
 					url: urlobj,
 					method: 'POST',
 					https: urlobj.protocol == 'https:',
@@ -510,10 +459,6 @@ export class HTTPClient {
 					body: config.body,
 					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent
 				})
-			}
-
-			if (!this.working) {
-				this.work()
 			}
 		})
 	}
