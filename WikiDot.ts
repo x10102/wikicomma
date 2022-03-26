@@ -1533,10 +1533,34 @@ export class WikiDot {
 					workers.push(async () => {
 						const localThread = await this.loadForumThread(forum.id, thread.id)
 
+						let shouldFetch = localThread == null || localThread.last != thread.last
+
+						if (!shouldFetch && localThread != null) {
+							let count = 0
+
+							const dive = (f: LocalForumPost) => {
+								count++
+
+								for (const child of f.children) {
+									dive(child)
+								}
+							}
+
+							for (const post of localThread.posts) {
+								dive(post)
+							}
+
+							shouldFetch = count != thread.postsNum
+
+							if (shouldFetch) {
+								this.error(`Post amount mismatch of ${thread.id} (expected ${thread.postsNum}, got ${count})`)
+							}
+						}
+
 						// TODO: IF we have meta, and it says that we fetched entire thread
 						// and it hasn't changed... is this really the case?
 						// about post edits, are they reflected anywhere???
-						if (localThread == null || localThread.last != thread.last) {
+						if (shouldFetch) {
 							// thread metadata is outdated
 							updated = true
 							this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
