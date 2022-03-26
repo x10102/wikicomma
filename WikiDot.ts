@@ -53,6 +53,8 @@ interface PageMeta {
 	name: string
 	page_id: number
 	rating?: number
+	version?: number
+	forum_thread?: number
 	last_revision: number
 	global_last_revision: number
 	revisions: PageRevision[]
@@ -61,6 +63,7 @@ interface PageMeta {
 interface GenericPageData {
 	page_id?: number
 	rating?: number
+	forum_thread?: number
 }
 
 interface FileMeta {
@@ -144,6 +147,11 @@ interface ForumCategory {
 	posts: number
 	threads: number
 	lastUser: User
+}
+
+interface LocalForumCategory extends ForumCategory {
+	full_scan: boolean
+	last_page: number
 }
 
 interface ForumRevisionBody {
@@ -744,6 +752,16 @@ export class WikiDot {
 			meta.rating = parseInt(ratingElem)
 		}
 
+		const discussElem = html.querySelector('discuss-button')?.attributes['href']
+
+		if (discussElem != undefined) {
+			const match = discussElem.match(WikiDot.threadRegExp)
+
+			if (match != null) {
+				meta.forum_thread = parseInt(match[1])
+			}
+		}
+
 		return meta
 	}
 
@@ -1029,6 +1047,7 @@ export class WikiDot {
 		let page = 0
 
 		while (true) {
+			this.log(`Fetching posts of ${thread} offset ${page + 1}`)
 			const fetch = await this.fetchThreadPosts(thread, ++page)
 			listing.push(...fetch)
 
@@ -1323,12 +1342,13 @@ export class WikiDot {
 					if (change.revision != undefined) {
 						let metadata = await this.loadPageMetadata(change.name)
 
-						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined) {
+						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined || metadata.version == undefined || metadata.version < 1) {
 							onceFetch = true
 							this.log(`Need to renew ${change.name}`)
 
 							const newMeta: PageMeta = {
 								name: change.name,
+								version: 1,
 								revisions: [],
 								rating: metadata != null ? metadata.rating : undefined,
 								page_id: metadata != null ? metadata.page_id : -1,
@@ -1353,6 +1373,9 @@ export class WikiDot {
 
 								if (pageMeta.rating != undefined)
 									newMeta.rating = pageMeta.rating
+
+								if (pageMeta.forum_thread != undefined)
+									newMeta.forum_thread = pageMeta.forum_thread
 
 								if (metadata == null) {
 									let changes: PageRevision[]
@@ -1488,31 +1511,17 @@ export class WikiDot {
 		}
 
 		this.log(`Fetching forums list`)
-		let localForums = await this.loadForumMeta()
-
-		if (localForums == null) {
-			localForums = []
-		}
-
 		const forums = await this.fetchForumCategories()
 
 		for (const forum of forums) {
-			let shouldContinue = true
+			const localForum = await this.loadForumCategory(forum.id)
 
-			for (const localForum of localForums) {
-				// Nothing changed
-				// TODO: Is this really the case IF someone edits their post???
-				if (localForum.id == forum.id && localForum.last == forum.last) {
-					shouldContinue = false
-					break
-				}
-			}
-
-			if (!shouldContinue) {
+			if (localForum != null && localForum.last == forum.last) {
 				continue
 			}
 
-			let page = 0
+			const full_scan = localForum != null ? localForum.full_scan : false
+			let page = localForum != null ? localForum.last_page : 0
 
 			while (true) {
 				let updated = false
@@ -1584,19 +1593,55 @@ export class WikiDot {
 							return localPost
 						}
 
+						const workers = []
+
 						for (const post of posts) {
-							const localPost = await workWithPost(post)
-							newMeta.posts.push(localPost)
-							// await this.writeForumPost(post.id, localPost)
+							workers.push((async () => {
+								while (true) {
+									try {
+										const localPost = await workWithPost(post)
+										newMeta.posts.push(localPost)
+										// await this.writeForumPost(post.id, localPost)
+										break
+									} catch(err) {
+										this.error(`Encountered ${err}, sleeping for 5 seconds`)
+										await sleep(5_000)
+									}
+								}
+							})())
 						}
 
+						await Promise.all(workers)
 						await this.writeForumThread(forum.id, thread.id, newMeta)
 					}
 				}
 
-				//if (threads.length < 20 || !updated) {
-				if (threads.length == 0 || !updated) {
+				if (threads.length == 0 || !updated && full_scan) {
+					await this.writeForumCategory({
+						title: forum.title,
+						description: forum.description,
+						id: forum.id,
+						last: forum.last,
+						posts: forum.posts,
+						threads: forum.threads,
+						lastUser: forum.lastUser,
+						full_scan: true,
+						last_page: 0
+					})
+
 					break
+				} else {
+					await this.writeForumCategory({
+						title: forum.title,
+						description: forum.description,
+						id: forum.id,
+						last: forum.last,
+						posts: forum.posts,
+						threads: forum.threads,
+						lastUser: forum.lastUser,
+						full_scan: full_scan,
+						last_page: page
+					})
 				}
 			}
 		}
@@ -1605,7 +1650,7 @@ export class WikiDot {
 
 		// if we didn't finish full scan then we would have to do relatively full scan of all forum categories
 		// but if we managed to reach the end, then we gonna have fast index!
-		await this.writeForumMeta(forums)
+		//await this.writeForumMeta(forums)
 
 		if (this.pendingFiles.data.length != 0) {
 			this.log(`Fetching pending files`)
@@ -1671,15 +1716,15 @@ export class WikiDot {
 	public async loadForumCategory(category: number) {
 		try {
 			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, {encoding: 'utf-8'})
-			return JSON.parse(read) as ForumCategory
+			return JSON.parse(read) as LocalForumCategory
 		} catch(err) {
 			return null
 		}
 	}
 
-	public async writeForumCategory(category: number, value: ForumCategory) {
+	public async writeForumCategory(value: LocalForumCategory) {
 		await promises.mkdir(`${this.workingDirectory}/meta/forum/category`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, JSON.stringify(value, null, 4))
+		await promises.writeFile(`${this.workingDirectory}/meta/forum/category/${value.id}.json`, JSON.stringify(value, null, 4))
 	}
 
 	public async loadForumThread(category: number, thread: number) {
@@ -1708,20 +1753,6 @@ export class WikiDot {
 	public async writeForumPost(post: number, value: LocalForumPost) {
 		await promises.mkdir(`${this.workingDirectory}/meta/forum/post`, {recursive: true})
 		await promises.writeFile(`${this.workingDirectory}/meta/forum/post/${post}.json`, JSON.stringify(value, null, 4))
-	}
-
-	public async loadForumMeta() {
-		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/forum.json`, {encoding: 'utf-8'})
-			return JSON.parse(read) as ForumCategory[]
-		} catch(err) {
-			return null
-		}
-	}
-
-	public async writeForumMeta(values: ForumCategory[]) {
-		await promises.mkdir(`${this.workingDirectory}/meta/`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/forum.json`, JSON.stringify(values, null, 4))
 	}
 
 	public async writePostRevision(category: number, thread: number, post: number, revision: 'latest' | number, value: string) {
