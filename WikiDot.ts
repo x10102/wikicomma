@@ -1066,7 +1066,7 @@ export class WikiDot {
 		}, true)
 
 		if (json.body != 'ok') {
-			throw Error(`Server returned ${json.body}`)
+			throw Error(`Server returned ${json.body} (${JSON.stringify(json)})`)
 		}
 
 		return {
