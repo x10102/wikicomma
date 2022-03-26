@@ -752,7 +752,7 @@ export class WikiDot {
 			meta.rating = parseInt(ratingElem)
 		}
 
-		const discussElem = html.querySelector('discuss-button')?.attributes['href']
+		const discussElem = html.querySelector('div#discuss-button')?.attributes['href']
 
 		if (discussElem != undefined) {
 			const match = discussElem.match(WikiDot.threadRegExp)
@@ -1051,7 +1051,7 @@ export class WikiDot {
 			const fetch = await this.fetchThreadPosts(thread, ++page)
 			listing.push(...fetch)
 
-			if (fetch.length < 10) {
+			if (fetch.length == 0) {
 				break
 			}
 		}
@@ -1342,13 +1342,13 @@ export class WikiDot {
 					if (change.revision != undefined) {
 						let metadata = await this.loadPageMetadata(change.name)
 
-						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined || metadata.version == undefined || metadata.version < 1) {
+						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined || metadata.version == undefined || metadata.version < 2) {
 							onceFetch = true
 							this.log(`Need to renew ${change.name}`)
 
 							const newMeta: PageMeta = {
 								name: change.name,
-								version: 1,
+								version: 2,
 								revisions: [],
 								rating: metadata != null ? metadata.rating : undefined,
 								page_id: metadata != null ? metadata.page_id : -1,
@@ -1527,94 +1527,104 @@ export class WikiDot {
 				let updated = false
 				this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
 				const threads = await this.fetchThreads(forum.id, ++page)
+				const workers = []
 
 				for (const thread of threads) {
-					const localThread = await this.loadForumThread(forum.id, thread.id)
+					workers.push((async () => {
+						const localThread = await this.loadForumThread(forum.id, thread.id)
 
-					// TODO: IF we have meta, and it says that we fetched entire thread
-					// and it hasn't changed... is this really the case?
-					// about post edits, are they reflected anywhere???
-					if (localThread == null || localThread.last != thread.last) {
-						// thread metadata is outdated
-						updated = true
-						this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
+						// TODO: IF we have meta, and it says that we fetched entire thread
+						// and it hasn't changed... is this really the case?
+						// about post edits, are they reflected anywhere???
+						if (localThread == null || localThread.last != thread.last) {
+							// thread metadata is outdated
+							updated = true
+							this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
 
-						const newMeta: LocalForumThread = {
-							title: thread.title,
-							id: thread.id,
-							description: thread.description,
-							last: thread.last,
-							lastUser: thread.lastUser,
-							started: thread.started,
-							startedUser: thread.startedUser,
-							postsNum: thread.postsNum,
-							sticky: thread.sticky,
-							//posts: localThread != null ? localThread.posts : []
-							posts: []
-						}
-
-						const posts = await this.fetchAllThreadPosts(thread.id)
-
-						const workWithPost = async (post: ForumPost) => {
-							await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
-
-							const localPost: LocalForumPost = {
-								id: post.id,
-								poster: post.poster,
-								stamp: post.stamp,
-								lastEdit: post.lastEdit,
-								lastEditBy: post.lastEditBy,
-								revisions: [],
-								children: []
+							const newMeta: LocalForumThread = {
+								title: thread.title,
+								id: thread.id,
+								description: thread.description,
+								last: thread.last,
+								lastUser: thread.lastUser,
+								started: thread.started,
+								startedUser: thread.startedUser,
+								postsNum: thread.postsNum,
+								sticky: thread.sticky,
+								//posts: localThread != null ? localThread.posts : []
+								posts: []
 							}
 
-							if (post.lastEdit != undefined) {
-								this.log(`Fetching revision list of post ${post.id}`)
-								const revisionList = await this.fetchPostRevisionList(post.id)
+							const posts = await this.fetchAllThreadPosts(thread.id)
 
-								for (const revision of revisionList) {
-									this.log(`Fetching revision ${revision.id} of post ${post.id}`)
-									const revContent = await this.fetchPostRevision(revision.id)
-									await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+							const workWithPost = async (post: ForumPost) => {
+								await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
 
-									localPost.revisions.push({
-										title: revContent.title,
-										author: revision.author,
-										id: revision.id,
-										stamp: revision.stamp
-									})
+								const localPost: LocalForumPost = {
+									id: post.id,
+									poster: post.poster,
+									stamp: post.stamp,
+									lastEdit: post.lastEdit,
+									lastEditBy: post.lastEditBy,
+									revisions: [],
+									children: []
 								}
-							}
 
-							for (const child of post.children) {
-								localPost.children.push(await workWithPost(child))
-							}
+								if (post.lastEdit != undefined) {
+									this.log(`Fetching revision list of post ${post.id}`)
+									const revisionList = await this.fetchPostRevisionList(post.id)
 
-							return localPost
-						}
+									for (const revision of revisionList) {
+										this.log(`Fetching revision ${revision.id} of post ${post.id}`)
+										const revContent = await this.fetchPostRevision(revision.id)
+										await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
 
-						const workers = []
-
-						for (const post of posts) {
-							workers.push((async () => {
-								while (true) {
-									try {
-										const localPost = await workWithPost(post)
-										newMeta.posts.push(localPost)
-										// await this.writeForumPost(post.id, localPost)
-										break
-									} catch(err) {
-										this.error(`Encountered ${err}, sleeping for 5 seconds`)
-										await sleep(5_000)
+										localPost.revisions.push({
+											title: revContent.title,
+											author: revision.author,
+											id: revision.id,
+											stamp: revision.stamp
+										})
 									}
 								}
-							})())
-						}
 
-						await Promise.all(workers)
-						await this.writeForumThread(forum.id, thread.id, newMeta)
-					}
+								const workers = []
+
+								for (const child of post.children) {
+									workers.push((async () => {
+										localPost.children.push(await workWithPost(child))
+									})())
+								}
+
+								await Promise.all(workers)
+								return localPost
+							}
+
+							const workers = []
+
+							for (const post of posts) {
+								workers.push((async () => {
+									while (true) {
+										try {
+											const localPost = await workWithPost(post)
+											newMeta.posts.push(localPost)
+											// await this.writeForumPost(post.id, localPost)
+											break
+										} catch(err) {
+											this.error(`Encountered ${err}, sleeping for 5 seconds`)
+											await sleep(5_000)
+										}
+									}
+								})())
+							}
+
+							await Promise.all(workers)
+							await this.writeForumThread(forum.id, thread.id, newMeta)
+						}
+					})())
 				}
+
+				await Promise.all(workers)
 
 				if (threads.length == 0 || !updated && full_scan) {
 					await this.writeForumCategory({
