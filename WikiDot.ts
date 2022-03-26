@@ -1632,7 +1632,12 @@ export class WikiDot {
 							return
 						}
 
-						await task()
+						try {
+							await task()
+						} catch(err) {
+							this.error(`Encountered ${err}, sleeping for 5 seconds`)
+							await sleep(5_000)
+						}
 					}
 				}
 
