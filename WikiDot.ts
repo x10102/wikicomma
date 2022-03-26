@@ -1516,7 +1516,7 @@ export class WikiDot {
 		for (const forum of forums) {
 			const localForum = await this.loadForumCategory(forum.id)
 
-			if (localForum != null && localForum.last == forum.last) {
+			if (localForum != null && localForum.last == forum.last && localForum.full_scan) {
 				continue
 			}
 
@@ -1632,11 +1632,14 @@ export class WikiDot {
 							return
 						}
 
-						try {
-							await task()
-						} catch(err) {
-							this.error(`Encountered ${err}, sleeping for 5 seconds`)
-							await sleep(5_000)
+						while (true) {
+							try {
+								await task()
+								break
+							} catch(err) {
+								this.error(`Encountered ${err}, sleeping for 5 seconds`)
+								await sleep(5_000)
+							}
 						}
 					}
 				}
