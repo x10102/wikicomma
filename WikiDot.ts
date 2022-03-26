@@ -1527,10 +1527,10 @@ export class WikiDot {
 				let updated = false
 				this.log(`Fetching threads of ${forum.id} offset ${page + 1}`)
 				const threads = await this.fetchThreads(forum.id, ++page)
-				const workers = []
+				const workers: any[] = []
 
 				for (const thread of threads) {
-					workers.push((async () => {
+					workers.push(async () => {
 						const localThread = await this.loadForumThread(forum.id, thread.id)
 
 						// TODO: IF we have meta, and it says that we fetched entire thread
@@ -1621,10 +1621,22 @@ export class WikiDot {
 							await Promise.all(workers)
 							await this.writeForumThread(forum.id, thread.id, newMeta)
 						}
-					})())
+					})
 				}
 
-				await Promise.all(workers)
+				const doWork = async () => {
+					while (true) {
+						const task = workers.pop()
+
+						if (task == undefined) {
+							return
+						}
+
+						await task()
+					}
+				}
+
+				await Promise.all([doWork(), doWork(), doWork()])
 
 				if (threads.length == 0 || !updated && full_scan) {
 					await this.writeForumCategory({
