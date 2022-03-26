@@ -546,7 +546,15 @@ export class WikiDot {
 	}
 
 	private async fetch(options: any) {
-		options["wikidot_token7"] = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
+		let cookie = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
+
+		if (cookie == undefined) {
+			this.fetchingToken = false
+			await this.fetchToken()
+			cookie = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
+		}
+
+		options["wikidot_token7"] = cookie
 
 		return await this.client.post(this.ajaxURL.href, {
 			body: encode(options),
