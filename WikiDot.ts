@@ -1580,8 +1580,10 @@ export class WikiDot {
 							}
 
 							const posts = await this.fetchAllThreadPosts(thread.id)
+							let fetchOnce = false
 
 							const workWithPost = async (post: ForumPost) => {
+								fetchOnce = true
 								await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
 
 								const localPost: LocalForumPost = {
@@ -1644,6 +1646,10 @@ export class WikiDot {
 
 							await Promise.all(workers)
 							await this.writeForumThread(forum.id, thread.id, newMeta)
+
+							if (fetchOnce) {
+								await this.compressForumThread(forum.id, thread.id)
+							}
 						}
 					})
 				}
@@ -1762,6 +1768,18 @@ export class WikiDot {
 			// hidden/system files start with dot
 			if (!name.startsWith('.') && (await promises.stat(`${this.workingDirectory}/pages/${name}`)).isDirectory()) {
 				await this.compressRevisions(name)
+			}
+		}
+
+		this.log(`Compressing forum threads`)
+
+		for (const category of await promises.readdir(`${this.workingDirectory}/forum/`)) {
+			if (!category.startsWith('.') && (await promises.stat(`${this.workingDirectory}/forum/${category}`)).isDirectory()) {
+				for (const thread of await promises.readdir(`${this.workingDirectory}/forum/${category}`)) {
+					if (!thread.startsWith('.') && !thread.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/forum/${category}/${thread}`)).isDirectory()) {
+						await this.compressForumThread(category, thread)
+					}
+				}
 			}
 		}
 	}
@@ -1918,6 +1936,67 @@ export class WikiDot {
 		} else {
 			this.log(`${this.workingDirectory}/pages/${normalizedName}/ is not empty, not removing it.`)
 		}
+	}
+
+	private async compressForumThread(category: number | string, thread: number | string) {
+		const listing = await promises.readdir(`${this.workingDirectory}/forum/${category}/${thread}`)
+
+		for (const subdir of listing) {
+			const path = `${this.workingDirectory}/forum/${category}/${thread}/${subdir}`
+			const num = parseInt(subdir)
+
+			if (num != num) {
+				this.error(`${path} is not a number (does not appear to be forum post), not compressing thread ${thread}`)
+				return
+			}
+
+			const stat = await promises.stat(path)
+
+			if (!stat.isDirectory()) {
+				this.error(`${path} is not a directory, not compressing thread ${thread}`)
+				return
+			}
+
+			for (const subpath of await promises.readdir(path)) {
+				const npath = `${path}/${subpath}`
+
+				if (!subpath.endsWith('.html')) {
+					this.error(`${npath} does not end with .html, not compressing thread ${thread}`)
+					return
+				}
+
+				const naming = subpath.substring(0, subpath.length - 5)
+
+				if (naming != 'latest') {
+					const num = parseInt(subdir)
+
+					if (num != num) {
+						this.error(`${npath} is not a number (does not appear to be forum post revision), not compressing thread ${thread}`)
+						return
+					}
+				}
+
+				const stat = await promises.stat(npath)
+
+				if (!stat.isFile()) {
+					this.error(`${npath} is not a file, not compressing thread ${thread}`)
+					return
+				}
+			}
+		}
+
+		this.log(`Compressing forum thread ${thread} in category ${category}`)
+
+		await addZipFiles(
+			`${this.workingDirectory}/forum/${category}/${thread}.7z`,
+			`${this.workingDirectory}/forum/${category}/${thread}/*.*`,
+
+			{
+				recursive: true
+			}
+		)
+
+		await promises.rm(`${this.workingDirectory}/forum/${category}/${thread}`, {recursive: true, force: false})
 	}
 
 	public async writeRevision(page: string, revision: number, body: string) {
