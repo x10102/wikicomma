@@ -620,7 +620,29 @@ export class WikiDot {
 		return listing
 	}
 
+	public async fetchChangesForce(page = 1, perPage = WikiDot.defaultPagenation) {
+		while (true) {
+			try {
+				return await this.fetchChanges(page, perPage)
+			} catch(err) {
+				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
+
 	private static dateMatcher = /time_([0-9]+)/
+
+	public async fetchPageChangeListForce(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
+		while (true) {
+			try {
+				return await this.fetchPageChangeList(page_id, page, perPage)
+			} catch(err) {
+				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
 
 	public async fetchPageChangeList(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
 		const listing: PageRevision[] = []
@@ -706,6 +728,24 @@ export class WikiDot {
 		return listing
 	}
 
+	public async fetchPageChangeListAllForce(page_id: number) {
+		const listing: PageRevision[] = []
+		let page = 0
+
+		while (true) {
+			this.log(`Fetching changeset offset ${page} of ${page_id}`)
+			const data = await this.fetchPageChangeListForce(page_id, ++page)
+			listing.push(...data)
+
+			//if (data.length < WikiDot.defaultPagenation) {
+			if (data.length == 0) {
+				break
+			}
+		}
+
+		return listing
+	}
+
 	public async fetchPageChangeListAllUntil(page_id: number, revision: number) {
 		const listing: PageRevision[] = []
 		let page = 0
@@ -713,6 +753,33 @@ export class WikiDot {
 		while (true) {
 			this.log(`Fetching changeset offset ${page} of ${page_id}`)
 			const data = await this.fetchPageChangeList(page_id, ++page)
+			let finish = false
+
+			for (const piece of data) {
+				if (piece.revision <= revision) {
+					finish = true
+					break
+				}
+
+				listing.push(piece)
+			}
+
+			//if (data.length < WikiDot.defaultPagenation || finish) {
+			if (data.length == 0 || finish) {
+				break
+			}
+		}
+
+		return listing
+	}
+
+	public async fetchPageChangeListAllUntilForce(page_id: number, revision: number) {
+		const listing: PageRevision[] = []
+		let page = 0
+
+		while (true) {
+			this.log(`Fetching changeset offset ${page} of ${page_id}`)
+			const data = await this.fetchPageChangeListForce(page_id, ++page)
 			let finish = false
 
 			for (const piece of data) {
@@ -1175,7 +1242,7 @@ export class WikiDot {
 	public async fetchFilesFor(page_id: number) {
 		await this.initialize()
 
-		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
+		for (const fileMeta of await this.fetchFileMetaListForce(page_id)) {
 			const match = WikiDot.splitFilePathRaw(fileMeta.url)
 
 			if (match != null) {
@@ -1279,6 +1346,17 @@ export class WikiDot {
 		}
 	}
 
+	public async fetchFileMetaForce(file_id: number) {
+		while (true) {
+			try {
+				return await this.fetchFileMeta(file_id)
+			} catch(err) {
+				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
+
 	private static fileIdMatcher = /file-row-([0-9]+)/i
 
 	public async fetchFileList(page_id: number) {
@@ -1316,6 +1394,16 @@ export class WikiDot {
 		return list
 	}
 
+	public async fetchFileMetaListForce(page_id: number) {
+		const list = []
+
+		for (const file_id of await this.fetchFileList(page_id)) {
+			list.push(await this.fetchFileMetaForce(file_id))
+		}
+
+		return list
+	}
+
 	public async workLoop() {
 		await this.initialize()
 
@@ -1324,7 +1412,7 @@ export class WikiDot {
 
 		while (true) {
 			this.log(`Fetching latest changes on page ${page + 1}`)
-			const changes = await this.fetchChanges(++page, this.localMeta.data.last_pagenation)
+			const changes = await this.fetchChangesForce(++page, this.localMeta.data.last_pagenation)
 
 			let onceUnseen = false
 			let onceFetch = false
@@ -1378,17 +1466,7 @@ export class WikiDot {
 									newMeta.forum_thread = pageMeta.forum_thread
 
 								if (metadata == null) {
-									let changes: PageRevision[]
-
-									while (true) {
-										try {
-											changes = await this.fetchPageChangeListAll(pageMeta.page_id)
-											break
-										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 10 seconds`)
-											await sleep(10_000)
-										}
-									}
+									const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
 
 									for (const localChange of changes) {
 										if (localChange.global_revision > newMeta.global_last_revision) {
@@ -1402,17 +1480,7 @@ export class WikiDot {
 								} else {
 									newMeta.revisions = metadata.revisions
 
-									let changes: PageRevision[]
-
-									while (true) {
-										try {
-											changes = await this.fetchPageChangeListAllUntil(pageMeta.page_id, metadata.last_revision)
-											break
-										} catch(err) {
-											this.log(`Encountered ${err}, sleeping for 10 seconds`)
-											await sleep(10_000)
-										}
-									}
+									const changes = await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, metadata.last_revision)
 
 									for (const localChange of changes) {
 										if (localChange.global_revision > newMeta.global_last_revision) {
