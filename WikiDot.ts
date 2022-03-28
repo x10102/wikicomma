@@ -488,41 +488,44 @@ export class WikiDot {
 		])
 	}
 
-	public client = new HTTPClient()
 	private ajaxURL: URL
 
 	constructor(
 		private name: string,
 		private url: string = `https://${name}.wikidot.com`,
-		private workingDirectory: string = `./storage/${name}`
+		private workingDirectory: string = `./storage/${name}`,
+		public client = new HTTPClient(),
+		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
 
-		let savingCookies = false
-		let timeoutPlaced = false
+		if (handleCookies) {
+			let savingCookies = false
+			let timeoutPlaced = false
 
-		this.client.cookies.onCookieAdded = async () => {
-			if (savingCookies) {
-				if (timeoutPlaced) {
+			this.client.cookies.onCookieAdded = async () => {
+				if (savingCookies) {
+					if (timeoutPlaced) {
+						return
+					}
+
+					timeoutPlaced = true
+
+					setTimeout(() => {
+						timeoutPlaced = false
+						savingCookies = true
+						this.saveCookies()
+						savingCookies = false
+					}, 1000)
+
 					return
 				}
 
-				timeoutPlaced = true
-
-				setTimeout(() => {
-					timeoutPlaced = false
-					savingCookies = true
-					this.saveCookies()
-					savingCookies = false
-				}, 1000)
-
-				return
+				savingCookies = true
+				this.saveCookies()
+				savingCookies = false
 			}
-
-			savingCookies = true
-			this.saveCookies()
-			savingCookies = false
 		}
 	}
 
@@ -625,7 +628,7 @@ export class WikiDot {
 			try {
 				return await this.fetchChanges(page, perPage)
 			} catch(err) {
-				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				this.error(`Encountered ${err} when fetching changes offset ${page}, sleeping for 5 seconds`)
 				await sleep(5_000)
 			}
 		}
@@ -638,7 +641,7 @@ export class WikiDot {
 			try {
 				return await this.fetchPageChangeList(page_id, page, perPage)
 			} catch(err) {
-				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				this.error(`Encountered ${err} when fetching changes of ${page_id} offset ${page}, sleeping for 5 seconds`)
 				await sleep(5_000)
 			}
 		}
@@ -1351,7 +1354,7 @@ export class WikiDot {
 			try {
 				return await this.fetchFileMeta(file_id)
 			} catch(err) {
-				this.error(`Encountered ${err}, sleeping for 5 seconds`)
+				this.error(`Encountered ${err} when fetching file meta, sleeping for 5 seconds`)
 				await sleep(5_000)
 			}
 		}
@@ -1384,6 +1387,17 @@ export class WikiDot {
 		return list
 	}
 
+	public async fetchFileListForce(page_id: number) {
+		while (true) {
+			try {
+				return await this.fetchFileList(page_id)
+			} catch(err) {
+				this.error(`Encountered ${err} when fetching file list, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
+
 	public async fetchFileMetaList(page_id: number) {
 		const list = []
 
@@ -1397,7 +1411,7 @@ export class WikiDot {
 	public async fetchFileMetaListForce(page_id: number) {
 		const list = []
 
-		for (const file_id of await this.fetchFileList(page_id)) {
+		for (const file_id of await this.fetchFileListForce(page_id)) {
 			list.push(await this.fetchFileMetaForce(file_id))
 		}
 

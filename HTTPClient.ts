@@ -46,6 +46,7 @@ export interface BakedRequest {
 	agent: http.Agent | https.Agent
 	reject: (err?: any) => void
 	resolve: (value: Buffer) => void
+	traceback?: string
 }
 
 export interface RequestConfig {
@@ -354,6 +355,7 @@ export class HTTPClient {
 			})
 
 			response.on('error', (err) => {
+				console.error(`Throw INNER ${err} on ${value.traceback}`)
 				value.reject(err)
 			})
 
@@ -434,7 +436,8 @@ export class HTTPClient {
 					resolve: resolve,
 					body: config.body,
 					followRedirects: config.followRedirects != undefined ? config.followRedirects : true,
-					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent
+					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent,
+					traceback: new Error().stack
 				})
 			}
 		})
@@ -457,7 +460,8 @@ export class HTTPClient {
 					reject: reject,
 					resolve: resolve,
 					body: config.body,
-					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent
+					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent,
+					traceback: new Error().stack
 				})
 			}
 		})
