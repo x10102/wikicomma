@@ -603,7 +603,8 @@ export class WikiDot {
 
 		for (const elem of html.querySelectorAll('.changes-list-item')) {
 			const url = elem.querySelector('td.title')?.querySelector('a')?.attrs['href']
-			const revision = elem.querySelector('td.revision-no')?.innerText?.match(/([0-9]+)/)
+			const revisionText = elem.querySelector('td.revision-no')?.innerText
+			const revision = revisionText?.match(/([0-9]+)/)
 			const mod_by = WikiDot.extractUser(elem.querySelector('td.mod-by'))
 
 			if (url != undefined) {
@@ -612,8 +613,11 @@ export class WikiDot {
 					author: mod_by
 				}
 
-				if (revision != undefined && revision != null) {
+				if (revision != null) {
 					obj.revision = parseInt(revision[1])
+				} else if (revisionText != undefined) {
+					// new page
+					obj.revision = 0
 				}
 
 				listing.push(obj)
