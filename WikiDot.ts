@@ -1435,6 +1435,8 @@ export class WikiDot {
 			let onceUnseen = false
 			let onceFetch = false
 
+			const tasks: any[] = []
+
 			for (const change of changes) {
 				if (!seen.has(change.name)) {
 					onceUnseen = true
@@ -1446,137 +1448,155 @@ export class WikiDot {
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
-						let metadata = await this.loadPageMetadata(change.name)
+						tasks.push(async () => {
+							let metadata = await this.loadPageMetadata(change.name)
 
-						if (metadata == null || metadata.last_revision < change.revision || metadata.page_id == undefined || metadata.version == undefined || metadata.version < 2) {
-							onceFetch = true
-							this.log(`Need to renew ${change.name}`)
+							if (
+								metadata == null ||
+								metadata.last_revision < change.revision! ||
+								metadata.page_id == undefined ||
+								metadata.version == undefined ||
+								metadata.version < 2
+							) {
+								onceFetch = true
+								this.log(`Need to renew ${change.name}`)
 
-							const newMeta: PageMeta = {
-								name: change.name,
-								version: 2,
-								revisions: [],
-								rating: metadata != null ? metadata.rating : undefined,
-								page_id: metadata != null ? metadata.page_id : -1,
-								last_revision: change.revision,
-								global_last_revision: metadata != null ? metadata.global_last_revision : 0
-							}
-
-							let pageMeta: GenericPageData
-
-							try {
-								pageMeta = await this.fetchGeneric(change.name)
-							} catch(err) {
-								//this.log(`Encountered ${err}, sleeping for 60 seconds`)
-								this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
-								//await sleep(60_000)
-								this.pushPendingPages(change.name)
-								continue
-							}
-
-							if (pageMeta.page_id != undefined) {
-								newMeta.page_id = pageMeta.page_id
-
-								if (pageMeta.rating != undefined)
-									newMeta.rating = pageMeta.rating
-
-								if (pageMeta.forum_thread != undefined)
-									newMeta.forum_thread = pageMeta.forum_thread
-
-								if (metadata == null) {
-									const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
-
-									for (const localChange of changes) {
-										if (localChange.global_revision > newMeta.global_last_revision) {
-											newMeta.global_last_revision = localChange.global_revision
-										}
-
-										newMeta.revisions.push(localChange)
-									}
-
-									await this.writePageMetadata(change.name, newMeta)
-								} else {
-									newMeta.revisions = metadata.revisions
-
-									const changes = await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, metadata.last_revision)
-
-									for (const localChange of changes) {
-										if (localChange.global_revision > newMeta.global_last_revision) {
-											newMeta.global_last_revision = localChange.global_revision
-										}
-
-										newMeta.revisions.push(localChange)
-									}
-
-									await this.writePageMetadata(change.name, newMeta)
-								}
-							}
-
-							metadata = newMeta
-						}
-
-						if (metadata.page_id == undefined) {
-							this.pushPendingPages(change.name)
-							continue
-						}
-
-						let fetchFilesOnce = false
-						const revisionsToFetch: PageRevision[] = []
-						const localRevs = await this.revisionList(change.name)
-
-						for (const key in metadata.revisions) {
-							const rev = metadata.revisions[key]
-
-							//if (!await this.revisionExists(change.name, rev.revision)) {
-							if (!localRevs.includes(rev.revision)) {
-								if (!fetchFilesOnce && metadata.page_id != undefined) {
-									fetchFilesOnce = true
-									this.fetchFilesFor(metadata.page_id)
+								const newMeta: PageMeta = {
+									name: change.name,
+									version: 2,
+									revisions: [],
+									rating: metadata != null ? metadata.rating : undefined,
+									page_id: metadata != null ? metadata.page_id : -1,
+									last_revision: change.revision!,
+									global_last_revision: metadata != null ? metadata.global_last_revision : 0
 								}
 
-								revisionsToFetch.push(rev)
-							}
-						}
-
-						const changes = revisionsToFetch.length != 0
-						flipArray(revisionsToFetch)
-
-						const worker = async () => {
-							while (true) {
-								const rev = revisionsToFetch.pop()
-
-								if (rev == undefined) {
-									break
-								}
+								let pageMeta: GenericPageData
 
 								try {
-									this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
-									const body = await this.fetchRevision(rev.global_revision)
-									await this.writeRevision(change.name, rev.revision, body)
+									pageMeta = await this.fetchGeneric(change.name)
 								} catch(err) {
-									this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
-									this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
-									this.pendingRevisions.markDirty()
+									//this.log(`Encountered ${err}, sleeping for 60 seconds`)
+									this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
+									//await sleep(60_000)
+									this.pushPendingPages(change.name)
+									return
+								}
+
+								if (pageMeta.page_id != undefined) {
+									newMeta.page_id = pageMeta.page_id
+
+									if (pageMeta.rating != undefined)
+										newMeta.rating = pageMeta.rating
+
+									if (pageMeta.forum_thread != undefined)
+										newMeta.forum_thread = pageMeta.forum_thread
+
+									if (metadata == null) {
+										const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
+
+										for (const localChange of changes) {
+											if (localChange.global_revision > newMeta.global_last_revision) {
+												newMeta.global_last_revision = localChange.global_revision
+											}
+
+											newMeta.revisions.push(localChange)
+										}
+									} else {
+										newMeta.revisions = metadata.revisions
+
+										const changes = await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, metadata.last_revision)
+
+										for (const localChange of changes) {
+											if (localChange.global_revision > newMeta.global_last_revision) {
+												newMeta.global_last_revision = localChange.global_revision
+											}
+
+											newMeta.revisions.unshift(localChange)
+										}
+									}
+
+									await this.writePageMetadata(change.name, newMeta)
+								}
+
+								metadata = newMeta
+							}
+
+							if (metadata.page_id == undefined) {
+								this.pushPendingPages(change.name)
+								return
+							}
+
+							let fetchFilesOnce = false
+							const revisionsToFetch: PageRevision[] = []
+							const localRevs = await this.revisionList(change.name)
+
+							for (const key in metadata.revisions) {
+								const rev = metadata.revisions[key]
+
+								//if (!await this.revisionExists(change.name, rev.revision)) {
+								if (!localRevs.includes(rev.revision)) {
+									if (!fetchFilesOnce && metadata.page_id != undefined) {
+										fetchFilesOnce = true
+										this.fetchFilesFor(metadata.page_id)
+									}
+
+									revisionsToFetch.push(rev)
 								}
 							}
-						}
 
-						await Promise.allSettled([
-							worker(),
-							worker(),
-							worker(),
-							worker(),
-							worker(),
-						])
+							const changes = revisionsToFetch.length != 0
+							flipArray(revisionsToFetch)
 
-						this.removePendingPages(change.name)
+							const worker = async () => {
+								while (true) {
+									const rev = revisionsToFetch.pop()
 
-						if (changes) {
-							await this.compressRevisions(WikiDot.normalizeName(change.name))
-						}
+									if (rev == undefined) {
+										break
+									}
+
+									try {
+										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
+										const body = await this.fetchRevision(rev.global_revision)
+										await this.writeRevision(change.name, rev.revision, body)
+									} catch(err) {
+										this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
+										this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
+										this.pendingRevisions.markDirty()
+									}
+								}
+							}
+
+							await Promise.allSettled([
+								worker(),
+								worker(),
+								worker(),
+								worker(),
+								worker(),
+							])
+
+							this.removePendingPages(change.name)
+
+							if (changes) {
+								await this.compressRevisions(WikiDot.normalizeName(change.name))
+							}
+						})
 					}
 				}
 			}
+
+			const worker = async () => {
+				while (tasks.length != 0) {
+					await tasks.pop()()
+				}
+			}
+
+			await Promise.allSettled([
+				worker(),
+				worker(),
+				worker(),
+			])
 
 			if (onceUnseen && !onceFetch && this.localMeta.data.full_scan) {
 				this.log(`Finished renewing all changed pages`)
