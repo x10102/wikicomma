@@ -390,7 +390,7 @@ export class WikiDot {
 	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
 		last_page: 0,
 		full_scan: false,
-		last_pagenation: WikiDot.defaultPagenation
+		last_pagenation: 1000 // WikiDot.defaultPagenation
 	}, `${this.workingDirectory}/meta/local.json`, v => {
 		if (typeof v != 'object') {
 			v = {}
@@ -398,7 +398,9 @@ export class WikiDot {
 
 		v.full_scan = v.full_scan != undefined ? v.full_scan : false
 		v.last_page = v.last_page != undefined ? v.last_page : 0
-		v.last_pagenation = v.last_pagenation != undefined ? v.last_pagenation : WikiDot.defaultPagenation
+		// 1000 for overcoming slowness of huge offsets
+		// (searching the data is much slower than actually building response on server)
+		v.last_pagenation = v.last_pagenation != undefined ? v.last_pagenation : 1000 // WikiDot.defaultPagenation
 
 		return v
 	})
