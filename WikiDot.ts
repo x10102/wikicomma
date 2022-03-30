@@ -29,6 +29,7 @@ import { promisify } from 'util'
 import { unescape } from 'html-escaper'
 import Seven from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
+import { OutgoingHttpHeaders } from "http2"
 
 const sleep = promisify(setTimeout)
 
@@ -558,7 +559,7 @@ export class WikiDot {
 		await this.saveCookies()
 	}
 
-	private async fetch(options: any) {
+	private async fetch(options: any, headers?: OutgoingHttpHeaders) {
 		let cookie = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
 
 		if (cookie == undefined) {
@@ -569,19 +570,28 @@ export class WikiDot {
 
 		options["wikidot_token7"] = cookie
 
-		return await this.client.post(this.ajaxURL.href, {
+		const assemble = {
 			body: encode(options),
 
 			headers: {
-				"Content-Type": "application/x-www-form-urlencoded"
+				"Content-Type": "application/x-www-form-urlencoded",
+				"Referer": this.url
 			},
 
 			followRedirects: false
-		})
+		}
+
+		if (headers != undefined) {
+			for (const key in headers) {
+				(assemble.headers as OutgoingHttpHeaders)[key] = headers[key]
+			}
+		}
+
+		return await this.client.post(this.ajaxURL.href, assemble)
 	}
 
-	private async fetchJson(options: any, custom = false) {
-		const json = JSON.parse((await this.fetch(options)).toString('utf-8'))
+	private async fetchJson(options: any, custom = false, headers?: OutgoingHttpHeaders) {
+		const json = JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
 
 		if (!custom && json.status != 'ok') {
 			throw Error(`Server returned ${json.status}, message: ${json.message}`)
@@ -599,6 +609,8 @@ export class WikiDot {
 			"page": page,
 			"perpage": perPage,
 			"moduleName": "changes/SiteChangesListModule",
+		}, false, {
+			"Referer": `${this.url}/system:recent-changes`
 		})
 
 		const html = parse(json.body)
@@ -635,6 +647,29 @@ export class WikiDot {
 				return await this.fetchChanges(page, perPage)
 			} catch(err) {
 				this.error(`Encountered ${err} when fetching changes offset ${page}, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
+
+	public async fetchChangesDynamic(page = 1, perPage = WikiDot.defaultPagenation, onFailureChange = -100, limit = 200): Promise<[RecentChange[], number]> {
+		let failures = 0
+
+		while (true) {
+			try {
+				return [await this.fetchChanges(page, perPage), perPage]
+			} catch(err) {
+				failures++
+
+				if (perPage > limit && failures > 3) {
+					failures = 0
+					const old = perPage
+					perPage += onFailureChange
+					this.error(`Encountered ${err} when fetching changes offset ${page}, reducing per-page entries from ${old} to ${perPage}, sleeping for 5 seconds`)
+				} else {
+					this.error(`Encountered ${err} when fetching changes offset ${page}, sleeping for 5 seconds`)
+				}
+
 				await sleep(5_000)
 			}
 		}
@@ -1432,7 +1467,15 @@ export class WikiDot {
 
 		while (true) {
 			this.log(`Fetching latest changes on page ${page + 1}`)
-			const changes = await this.fetchChangesForce(++page, this.localMeta.data.last_pagenation)
+			const [changes, newPerPage] = await this.fetchChangesDynamic(++page, this.localMeta.data.last_pagenation)
+
+			if (newPerPage != this.localMeta.data.last_pagenation) {
+				this.localMeta.data.last_pagenation = newPerPage
+				this.localMeta.data.full_scan = false
+				page = 0
+				this.localMeta.markDirty()
+				this.error(`Pagenation changed to ${newPerPage}, resetting full flag scan!`)
+			}
 
 			let onceUnseen = false
 			let onceFetch = false
