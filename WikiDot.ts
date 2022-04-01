@@ -1304,7 +1304,11 @@ export class WikiDot {
 					continue
 				}
 
-				this.fetchFileInner(fileMeta, split, recombined)
+				this.fetchFileInner(fileMeta, split, recombined, {
+					headers: {
+						'Referer': this.url
+					}
+				})
 			}
 		}
 	}
@@ -1906,7 +1910,8 @@ export class WikiDot {
 
 					this.fetchFileInner(readMeta, split, recombined, {
 						headers: {
-							'Cache-Control': 'no-cache'
+							'Cache-Control': 'no-cache',
+							'Referer': this.url
 						}
 					})
 				}
