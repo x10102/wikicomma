@@ -144,7 +144,7 @@ interface ForumCategory {
 	title: string
 	description: string
 	id: number
-	last: number
+	last?: number
 	posts: number
 	threads: number
 	lastUser: User
@@ -924,7 +924,8 @@ export class WikiDot {
 				const threadsNum = parseInt(threads.innerText.trim())
 				const postsNum = parseInt(posts.innerText.trim())
 
-				const lastDate = parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
+				const lastDateElemMatch = last.querySelector('span.odate')?.attributes['class'].match(WikiDot.dateMatcher)
+				const lastDate = lastDateElemMatch != undefined && lastDateElemMatch != null ? parseInt(lastDateElemMatch[1]) : undefined
 				const lastUser = WikiDot.extractUser(last)
 
 				listing.push({
