@@ -1756,18 +1756,24 @@ export class WikiDot {
 									this.log(`Fetching revision list of post ${post.id}`)
 									const revisionList = await this.fetchPostRevisionList(post.id)
 
-									for (const revision of revisionList) {
-										this.log(`Fetching revision ${revision.id} of post ${post.id}`)
-										const revContent = await this.fetchPostRevision(revision.id)
-										await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+									const revWorker = []
 
-										localPost.revisions.push({
-											title: revContent.title,
-											author: revision.author,
-											id: revision.id,
-											stamp: revision.stamp
-										})
+									for (const revision of revisionList) {
+										revWorker.push((async () => {
+											this.log(`Fetching revision ${revision.id} of post ${post.id}`)
+											const revContent = await this.fetchPostRevision(revision.id)
+											await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+
+											localPost.revisions.push({
+												title: revContent.title,
+												author: revision.author,
+												id: revision.id,
+												stamp: revision.stamp
+											})
+										})())
 									}
+
+									await Promise.all(revWorker)
 								}
 
 								const workers = []
