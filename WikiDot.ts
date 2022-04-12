@@ -61,6 +61,7 @@ interface PageMeta {
 	revisions: PageRevision[]
 	tags?: string[]
 	title?: string
+	votings?: [User, boolean][]
 }
 
 interface GenericPageData {
@@ -367,7 +368,7 @@ export class WikiDot {
 		const regMatch = elem.querySelector('a')?.attributes['href'].match(WikiDot.usernameMatcher)
 		let user: string | number | undefined = regMatch ? regMatch[1] : undefined
 
-		if (!user) {
+		if (user === undefined) {
 			user = elem.querySelector('span.deleted')?.attributes['data-id']
 
 			if (user) {
@@ -375,7 +376,16 @@ export class WikiDot {
 			}
 		}
 
-		if (user == undefined) {
+		// in case we got passed the root element of user span
+		if (user === undefined) {
+			user = elem.attributes['data-id']
+
+			if (user) {
+				user = parseInt(user)
+			}
+		}
+
+		if (user === undefined) {
 			return null
 		}
 
@@ -902,6 +912,69 @@ export class WikiDot {
 		}
 
 		return meta
+	}
+
+	public async fetchPageVoters(page_id: number) {
+		const json = await this.fetchJson({
+			"pageId": page_id,
+			"moduleName": "pagerate/WhoRatedPageModule",
+		})
+
+		const html = parse(json.body)
+
+		let lastUser: User | undefined = undefined
+		let lastRating: boolean | undefined = undefined
+		let row = 0
+		const listing: [User, boolean][] = []
+
+		let findDiv: HTMLElement | undefined = undefined
+
+		for (const elem of html.childNodes) {
+			if (elem instanceof HTMLElement && elem.tagName.toLowerCase() == 'div') {
+				findDiv = elem
+				break
+			}
+		}
+
+		if (findDiv === undefined) {
+			return
+		}
+
+		for (const elem of findDiv.childNodes) {
+			if (elem instanceof HTMLElement) {
+				if (elem.tagName.toLowerCase() == 'br') {
+					if (lastUser === undefined || lastRating === undefined) {
+						// malformed!
+						throw new TypeError(`Malformed voting list near row ${row}`)
+					}
+
+					listing.push([lastUser, lastRating])
+					lastUser = undefined
+					lastRating = undefined
+				} else if (elem.tagName.toLowerCase() == 'span') {
+					if (lastUser === undefined) {
+						// must be an user
+						lastUser = WikiDot.extractUser(elem)
+					} else if (lastRating === undefined) {
+						// must be a vote
+						const decoded = unescape(elem.innerHTML).trim()
+
+						if (decoded == '+') {
+							lastRating = true
+						} else if (decoded == '-') {
+							lastRating = false
+						} else {
+							throw new TypeError(`Garbage in voting list near row ${row} (voting element was ${decoded}, expected + or -)`)
+						}
+					} else {
+						// garbage
+						throw new TypeError(`Garbage in voting list near row ${row}`)
+					}
+				}
+			}
+		}
+
+		return listing
 	}
 
 	public async fetchRevision(revision_id: number) {
@@ -1534,14 +1607,14 @@ export class WikiDot {
 								metadata.last_revision < change.revision! ||
 								metadata.page_id == undefined ||
 								metadata.version == undefined ||
-								metadata.version < 5
+								metadata.version < 7
 							) {
 								onceFetch = true
 								this.log(`Need to renew ${change.name}`)
 
 								const newMeta: PageMeta = {
 									name: change.name,
-									version: 5,
+									version: 7,
 									revisions: [],
 									rating: metadata != null ? metadata.rating : undefined,
 									page_id: metadata != null ? metadata.page_id : -1,
@@ -1549,6 +1622,7 @@ export class WikiDot {
 									global_last_revision: metadata != null ? metadata.global_last_revision : 0,
 									tags: metadata != null ? metadata.tags : undefined,
 									title: metadata != null ? metadata.title : undefined,
+									votings: metadata != null ? metadata.votings : undefined,
 								}
 
 								let pageMeta: GenericPageData
@@ -1577,6 +1651,15 @@ export class WikiDot {
 
 									if (pageMeta.page_name != undefined)
 										newMeta.title = pageMeta.page_name
+
+									for (let _i = 0; _i < 3; _i++) {
+										try {
+											newMeta.votings = await this.fetchPageVoters(pageMeta.page_id)
+											break
+										} catch(err) {
+											this.error(`Encoutnered error fetching ${change.name} voters: ${err}`)
+										}
+									}
 
 									if (metadata == null) {
 										const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
@@ -1647,7 +1730,7 @@ export class WikiDot {
 										const body = await this.fetchRevision(rev.global_revision)
 										await this.writeRevision(change.name, rev.revision, body)
 									} catch(err) {
-										this.log(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
+										this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
 										this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
 										this.pendingRevisions.markDirty()
 									}
