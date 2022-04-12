@@ -59,12 +59,16 @@ interface PageMeta {
 	last_revision: number
 	global_last_revision: number
 	revisions: PageRevision[]
+	tags?: string[]
+	title?: string
 }
 
 interface GenericPageData {
 	page_id?: number
+	page_name?: string
 	rating?: number
 	forum_thread?: number
+	tags?: string[]
 }
 
 interface FileMeta {
@@ -844,6 +848,9 @@ export class WikiDot {
 		return listing
 	}
 
+	private static tagMatchRegExpA = /\/tag\/(\S+)#pages$/i
+	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
+
 	public async fetchGeneric(page: string) {
 		const result = await this.client.get(`${this.url}/${page}`, {followRedirects: false})
 		const html = parse(result.toString('utf-8'))
@@ -871,6 +878,27 @@ export class WikiDot {
 			if (match != null) {
 				meta.forum_thread = parseInt(match[1])
 			}
+		}
+
+		const pageTagsElem = html.querySelector('div.page-tags')?.querySelector('span')?.querySelectorAll('a')
+
+		if (pageTagsElem != undefined) {
+			for (const elem of pageTagsElem) {
+				const matchedA = elem.attributes['href']?.match(WikiDot.tagMatchRegExpA)
+				const matchedB = elem.attributes['href']?.match(WikiDot.tagMatchRegExpB)
+				const matched = matchedA != null ? matchedA : matchedB
+
+				if (matched != null) {
+					meta.tags = meta.tags != undefined ? meta.tags : []
+					meta.tags.push(decodeURIComponent(matched[1]))
+				}
+			}
+		}
+
+		const pageName = html.querySelector('div#page-title')?.innerText
+
+		if (pageName != undefined) {
+			meta.page_name = unescape(pageName).trim().replace(WikiDot.nbspMatch, ' ')
 		}
 
 		return meta
@@ -1506,19 +1534,21 @@ export class WikiDot {
 								metadata.last_revision < change.revision! ||
 								metadata.page_id == undefined ||
 								metadata.version == undefined ||
-								metadata.version < 2
+								metadata.version < 5
 							) {
 								onceFetch = true
 								this.log(`Need to renew ${change.name}`)
 
 								const newMeta: PageMeta = {
 									name: change.name,
-									version: 2,
+									version: 5,
 									revisions: [],
 									rating: metadata != null ? metadata.rating : undefined,
 									page_id: metadata != null ? metadata.page_id : -1,
 									last_revision: change.revision!,
-									global_last_revision: metadata != null ? metadata.global_last_revision : 0
+									global_last_revision: metadata != null ? metadata.global_last_revision : 0,
+									tags: metadata != null ? metadata.tags : undefined,
+									title: metadata != null ? metadata.title : undefined,
 								}
 
 								let pageMeta: GenericPageData
@@ -1541,6 +1571,12 @@ export class WikiDot {
 
 									if (pageMeta.forum_thread != undefined)
 										newMeta.forum_thread = pageMeta.forum_thread
+
+									if (pageMeta.tags != undefined)
+										newMeta.tags = pageMeta.tags
+
+									if (pageMeta.page_name != undefined)
+										newMeta.title = pageMeta.page_name
 
 									if (metadata == null) {
 										const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
