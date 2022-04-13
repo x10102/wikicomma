@@ -1601,7 +1601,7 @@ export class WikiDot {
 						loc = 'main'
 					}
 
-					if (loc.startsWith('/forum')) {
+					if (loc.startsWith('/forum') || loc.startsWith('forum/')) {
 						continue
 					}
 
