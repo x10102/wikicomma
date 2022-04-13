@@ -257,20 +257,12 @@ export class HTTPClient {
 	private httpsagent = new https.Agent({
 		keepAlive: true,
 		keepAliveMsecs: 10000,
-		//maxTotalSockets: this.connections,
-		maxTotalSockets: 65565,
-		//maxFreeSockets: this.connections,
-		maxFreeSockets: 255,
 		maxSockets: this.connections
 	})
 
 	private httpagent = new http.Agent({
 		keepAlive: true,
 		keepAliveMsecs: 10000,
-		//maxTotalSockets: this.connections,
-		maxTotalSockets: 65565,
-		//maxFreeSockets: this.connections,
-		maxFreeSockets: 255,
 		maxSockets: this.connections
 	})
 
@@ -341,8 +333,11 @@ export class HTTPClient {
 					value.https = value.url.protocol == 'https:'
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.handleRequest(value)
+					response.destroy()
 				} else {
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
+					finished = true
+					response.destroy()
 				}
 
 				return

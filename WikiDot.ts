@@ -854,7 +854,7 @@ export class WikiDot {
 	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
 
 	public async fetchGeneric(page: string) {
-		const result = await this.client.get(`${this.url}/${page}?t=${Date.now()}`, {followRedirects: false})
+		const result = await this.client.get(`${this.url}/${page}?_ts=${Date.now()}`, {followRedirects: false})
 		const html = parse(result.toString('utf-8'))
 		const meta: GenericPageData = {}
 
