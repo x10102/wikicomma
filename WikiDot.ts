@@ -1764,7 +1764,11 @@ export class WikiDot {
 
 		const worker = async () => {
 			while (tasks.length != 0) {
-				await tasks.pop()()
+				try {
+					await tasks.pop()()
+				} catch(err) {
+					this.error(`Task failed: ${err}`)
+				}
 			}
 		}
 
