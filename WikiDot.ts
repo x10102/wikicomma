@@ -44,7 +44,7 @@ interface RecentChange {
 interface PageRevision {
 	revision: number
 	global_revision: number
-	author?: string
+	author: User
 	stamp?: number
 	flags?: string
 	commentary?: string
@@ -739,9 +739,9 @@ export class WikiDot {
 				continue
 			}
 
-			const author = (values[4] as HTMLElement)?.querySelector('a')?.attrs['href']?.match(WikiDot.usernameMatcher)
+			const author = WikiDot.extractUser(values[4] as HTMLElement)
 			const time = values[5].querySelector('span')?.attrs['class']?.match(WikiDot.dateMatcher)
-			const commentary = values[6].innerHTML.trim()
+			const commentary = values[6].textContent.trim()
 
 			const parseRev = parseInt(revision[1])
 			const parseGlobalRev = parseInt(global_revision[1])
@@ -755,10 +755,10 @@ export class WikiDot {
 			const obj: PageRevision = {
 				revision: parseRev,
 				global_revision: parseGlobalRev,
-				author: author != null ? author[1] : undefined,
+				author: author,
 				stamp: parseTime != null && !isNaN(parseTime) ? parseTime : undefined,
 				flags: flags.replace(/\s+/g, ' '),
-				commentary: unescape(commentary)
+				commentary: commentary
 			}
 
 			listing.push(obj)
@@ -904,10 +904,10 @@ export class WikiDot {
 			}
 		}
 
-		const pageName = html.querySelector('div#page-title')?.innerText
+		const pageName = html.querySelector('div#page-title')?.textContent
 
 		if (pageName != undefined) {
-			meta.page_name = unescape(pageName).trim()
+			meta.page_name = pageName.trim()
 		}
 
 		return meta
@@ -956,7 +956,7 @@ export class WikiDot {
 						lastUser = WikiDot.extractUser(elem)
 					} else if (lastRating === undefined) {
 						// must be a vote
-						const decoded = unescape(elem.innerHTML).trim()
+						const decoded = elem.textContent.trim()
 
 						if (decoded == '+') {
 							lastRating = true
@@ -985,7 +985,7 @@ export class WikiDot {
 		const html = parse(json.body)
 		const div = html.querySelector('div.page-source')
 
-		return div != undefined ? unescape(div.innerText) : ''
+		return div != undefined ? div.textContent : ''
 	}
 
 	private static categoryRegExp = /forum\/c-([0-9]+)/
@@ -1017,9 +1017,9 @@ export class WikiDot {
 
 				const title = name.querySelector('div.title')!
 				const titleElem = title.querySelector('a')!
-				const titleText = unescape(titleElem.innerText.trim())
+				const titleText = titleElem.textContent.trim()
 				const categoryID = parseInt(titleElem.attributes['href'].match(WikiDot.categoryRegExp)![1])
-				const description = unescape(name.querySelector('div.description')!.innerText.trim())
+				const description = name.querySelector('div.description')!.textContent.trim()
 
 				const threadsNum = parseInt(threads.innerText.trim())
 				const postsNum = parseInt(posts.innerText.trim())
@@ -1069,13 +1069,13 @@ export class WikiDot {
 
 			const title = name.querySelector('div.title')!
 			const titleElem = title.querySelector('a')!
-			const titleText = unescape(titleElem.innerText.trim())
+			const titleText = titleElem.textContent.trim()
 			const threadID = parseInt(titleElem.attributes['href'].match(WikiDot.threadRegExp)![1])
 
 			// fairly weak check
 			const sticky = (title.firstChild instanceof TextNode) ? title.firstChild.innerText.trim() != '' : false
 
-			const description = unescape(name.querySelector('div.description')!.innerText.trim())
+			const description = name.querySelector('div.description')!.textContent.trim()
 			const postsNum = parseInt(posts.innerText.trim())
 			const lastDate = last.childNodes.length > 1 ? parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1]) : undefined
 			const lastUser = last.childNodes.length > 1 ? WikiDot.extractUser(last) : undefined
@@ -1591,10 +1591,6 @@ export class WikiDot {
 				if (!seen.has(change.name)) {
 					onceUnseen = true
 
-					if (change.name.startsWith('nav:') || change.name.startsWith('tech:')) {
-						continue
-					}
-
 					seen.set(change.name, true)
 
 					if (change.revision != undefined) {
@@ -1637,7 +1633,19 @@ export class WikiDot {
 								}
 
 								if (pageMeta.page_id != undefined) {
-									newMeta.page_id = pageMeta.page_id
+									if (newMeta.page_id != -1 && newMeta.page_id != pageMeta.page_id) {
+										// page was removed, and created from scratch
+										await this.markPageReplaced(change.name)
+										newMeta.rating = undefined
+										newMeta.tags = undefined
+										newMeta.title = undefined
+										newMeta.votings = undefined
+										newMeta.global_last_revision = 0
+										newMeta.page_id = pageMeta.page_id
+										metadata = null
+									} else {
+										newMeta.page_id = pageMeta.page_id
+									}
 
 									if (pageMeta.rating != undefined)
 										newMeta.rating = pageMeta.rating
@@ -1742,6 +1750,9 @@ export class WikiDot {
 								worker(),
 								worker(),
 								worker(),
+								worker(),
+								worker(),
+								worker(),
 							])
 
 							this.removePendingPages(change.name)
@@ -1761,6 +1772,11 @@ export class WikiDot {
 			}
 
 			await Promise.allSettled([
+				worker(),
+				worker(),
+				worker(),
+				worker(),
+				worker(),
 				worker(),
 				worker(),
 				worker(),
@@ -2291,6 +2307,26 @@ export class WikiDot {
 			return JSON.parse(read) as PageMeta
 		} catch(err) {
 			return null
+		}
+	}
+
+	public async markPageReplaced(page: string) {
+		try {
+			await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
+		} catch(err) {
+			this.error(String(err))
+		}
+
+		try {
+			await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}.7z`)
+		} catch(err) {
+			this.error(String(err))
+		}
+
+		try {
+			await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
+		} catch(err) {
+			// this.error(String(err))
 		}
 	}
 
