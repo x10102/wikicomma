@@ -47,6 +47,7 @@ export interface BakedRequest {
 	reject: (err?: any) => void
 	resolve: (value: Buffer) => void
 	traceback?: string
+	requestFailures: number
 }
 
 export interface RequestConfig {
@@ -413,7 +414,13 @@ export class HTTPClient {
 				return
 			}
 
-			value.reject(err)
+			// accept two failures
+			if (value.requestFailures < 2) {
+				value.requestFailures++
+				this.handleRequest(value)
+			} else {
+				value.reject(err)
+			}
 		})
 
 		request.end()
@@ -437,7 +444,8 @@ export class HTTPClient {
 					body: config.body,
 					followRedirects: config.followRedirects != undefined ? config.followRedirects : true,
 					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent,
-					traceback: new Error().stack
+					traceback: new Error().stack,
+					requestFailures: 0
 				})
 			}
 		})
@@ -461,7 +469,8 @@ export class HTTPClient {
 					resolve: resolve,
 					body: config.body,
 					agent: urlobj.protocol == 'https:' ? this.httpsagent : this.httpagent,
-					traceback: new Error().stack
+					traceback: new Error().stack,
+					requestFailures: 0
 				})
 			}
 		})
