@@ -333,6 +333,7 @@ export class HTTPClient {
 					value.https = value.url.protocol == 'https:'
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.handleRequest(value)
+					finished = true
 					response.destroy()
 				} else {
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
