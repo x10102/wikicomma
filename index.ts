@@ -38,7 +38,7 @@ interface DaemonConfig {
 
 	async function worker() {
 		while (tasks.length != 0) {
-			await tasks.pop()()
+			await tasks.splice(0, 1)[0]()
 		}
 	}
 
