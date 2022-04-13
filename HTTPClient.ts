@@ -257,16 +257,20 @@ export class HTTPClient {
 	private httpsagent = new https.Agent({
 		keepAlive: true,
 		keepAliveMsecs: 10000,
-		maxTotalSockets: this.connections,
-		maxFreeSockets: this.connections,
+		//maxTotalSockets: this.connections,
+		maxTotalSockets: 65565,
+		//maxFreeSockets: this.connections,
+		maxFreeSockets: 255,
 		maxSockets: this.connections
 	})
 
 	private httpagent = new http.Agent({
 		keepAlive: true,
 		keepAliveMsecs: 10000,
-		maxTotalSockets: this.connections,
-		maxFreeSockets: this.connections,
+		//maxTotalSockets: this.connections,
+		maxTotalSockets: 65565,
+		//maxFreeSockets: this.connections,
+		maxFreeSockets: 255,
 		maxSockets: this.connections
 	})
 

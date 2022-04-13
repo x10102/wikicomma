@@ -50,18 +50,33 @@ interface PageRevision {
 	commentary?: string
 }
 
+function findMostRevision(list: PageRevision[]) {
+	if (list.length == 0) {
+		return null
+	}
+
+	let max = list[0].revision
+
+	for (const rev of list) {
+		if (rev.revision > max) {
+			max = rev.revision
+		}
+	}
+
+	return max
+}
+
 interface PageMeta {
 	name: string
 	page_id: number
 	rating?: number
 	version?: number
 	forum_thread?: number
-	last_revision: number
-	global_last_revision: number
 	revisions: PageRevision[]
 	tags?: string[]
 	title?: string
 	votings?: [User, boolean][]
+	sitemap_update?: number
 }
 
 interface GenericPageData {
@@ -861,7 +876,7 @@ export class WikiDot {
 	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
 
 	public async fetchGeneric(page: string) {
-		const result = await this.client.get(`${this.url}/${page}`, {followRedirects: false})
+		const result = await this.client.get(`${this.url}/${page}?t=${Date.now()}`, {followRedirects: false})
 		const html = parse(result.toString('utf-8'))
 		const meta: GenericPageData = {}
 
@@ -1570,235 +1585,224 @@ export class WikiDot {
 		let page = this.localMeta.data.last_page
 		const seen = new Map<string, boolean>()
 
-		while (true) {
-			this.log(`Fetching latest changes on page ${page + 1}`)
-			const [changes, newPerPage] = await this.fetchChangesDynamic(++page, this.localMeta.data.last_pagenation)
+		this.log(`Fetching sitemap.xml`)
+		const sitemap = (await this.client.get(`${this.url}/sitemap.xml`)).toString('utf-8')
+		const pages = []
 
-			if (newPerPage != this.localMeta.data.last_pagenation) {
-				this.localMeta.data.last_pagenation = newPerPage
-				this.localMeta.data.full_scan = false
-				page = 0
-				this.localMeta.markDirty()
-				this.error(`Pagenation changed to ${newPerPage}, resetting full flag scan!`)
-			}
+		for (const loc of parse(sitemap).querySelectorAll('loc')) {
+			const pageMatch = loc.textContent.match(/_page_([0-9]+)\.xml$/)
 
-			let onceUnseen = false
-			let onceFetch = false
-
-			const tasks: any[] = []
-
-			for (const change of changes) {
-				if (!seen.has(change.name)) {
-					onceUnseen = true
-
-					seen.set(change.name, true)
-
-					if (change.revision != undefined) {
-						tasks.push(async () => {
-							let metadata = await this.loadPageMetadata(change.name)
-
-							if (
-								metadata == null ||
-								metadata.last_revision < change.revision! ||
-								metadata.page_id == undefined ||
-								metadata.version == undefined ||
-								metadata.version < 7
-							) {
-								onceFetch = true
-								this.log(`Need to renew ${change.name}`)
-
-								const newMeta: PageMeta = {
-									name: change.name,
-									version: 7,
-									revisions: [],
-									rating: metadata != null ? metadata.rating : undefined,
-									page_id: metadata != null ? metadata.page_id : -1,
-									last_revision: change.revision!,
-									global_last_revision: metadata != null ? metadata.global_last_revision : 0,
-									tags: metadata != null ? metadata.tags : undefined,
-									title: metadata != null ? metadata.title : undefined,
-									votings: metadata != null ? metadata.votings : undefined,
-								}
-
-								let pageMeta: GenericPageData
-
-								try {
-									pageMeta = await this.fetchGeneric(change.name)
-								} catch(err) {
-									//this.log(`Encountered ${err}, sleeping for 60 seconds`)
-									this.log(`Encountered ${err}, postproning page ${change.name} for late fetch`)
-									//await sleep(60_000)
-									this.pushPendingPages(change.name)
-									return
-								}
-
-								if (pageMeta.page_id != undefined) {
-									if (newMeta.page_id != -1 && newMeta.page_id != pageMeta.page_id) {
-										// page was removed, and created from scratch
-										await this.markPageReplaced(change.name)
-										newMeta.rating = undefined
-										newMeta.tags = undefined
-										newMeta.title = undefined
-										newMeta.votings = undefined
-										newMeta.global_last_revision = 0
-										newMeta.page_id = pageMeta.page_id
-										metadata = null
-									} else {
-										newMeta.page_id = pageMeta.page_id
-									}
-
-									if (pageMeta.rating != undefined)
-										newMeta.rating = pageMeta.rating
-
-									if (pageMeta.forum_thread != undefined)
-										newMeta.forum_thread = pageMeta.forum_thread
-
-									if (pageMeta.tags != undefined)
-										newMeta.tags = pageMeta.tags
-
-									if (pageMeta.page_name != undefined)
-										newMeta.title = pageMeta.page_name
-
-									for (let _i = 0; _i < 3; _i++) {
-										try {
-											newMeta.votings = await this.fetchPageVoters(pageMeta.page_id)
-											break
-										} catch(err) {
-											this.error(`Encoutnered error fetching ${change.name} voters: ${err}`)
-										}
-									}
-
-									if (metadata == null) {
-										const changes = await this.fetchPageChangeListAllForce(pageMeta.page_id)
-
-										for (const localChange of changes) {
-											if (localChange.global_revision > newMeta.global_last_revision) {
-												newMeta.global_last_revision = localChange.global_revision
-											}
-
-											newMeta.revisions.push(localChange)
-										}
-									} else {
-										newMeta.revisions = metadata.revisions
-
-										const changes = await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, metadata.last_revision)
-
-										for (const localChange of changes) {
-											if (localChange.global_revision > newMeta.global_last_revision) {
-												newMeta.global_last_revision = localChange.global_revision
-											}
-
-											newMeta.revisions.unshift(localChange)
-										}
-									}
-
-									await this.writePageMetadata(change.name, newMeta)
-								}
-
-								metadata = newMeta
-							}
-
-							if (metadata.page_id == undefined) {
-								this.pushPendingPages(change.name)
-								return
-							}
-
-							let fetchFilesOnce = false
-							const revisionsToFetch: PageRevision[] = []
-							const localRevs = await this.revisionList(change.name)
-
-							for (const key in metadata.revisions) {
-								const rev = metadata.revisions[key]
-
-								//if (!await this.revisionExists(change.name, rev.revision)) {
-								if (!localRevs.includes(rev.revision)) {
-									if (!fetchFilesOnce && metadata.page_id != undefined) {
-										fetchFilesOnce = true
-										this.fetchFilesFor(metadata.page_id)
-									}
-
-									revisionsToFetch.push(rev)
-								}
-							}
-
-							const changes = revisionsToFetch.length != 0
-							flipArray(revisionsToFetch)
-
-							const worker = async () => {
-								while (true) {
-									const rev = revisionsToFetch.pop()
-
-									if (rev == undefined) {
-										break
-									}
-
-									try {
-										this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${change.name}`)
-										const body = await this.fetchRevision(rev.global_revision)
-										await this.writeRevision(change.name, rev.revision, body)
-									} catch(err) {
-										this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${change.name} for later fetch`)
-										this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
-										this.pendingRevisions.markDirty()
-									}
-								}
-							}
-
-							await Promise.allSettled([
-								worker(),
-								worker(),
-								worker(),
-								worker(),
-								worker(),
-								worker(),
-								worker(),
-								worker(),
-							])
-
-							this.removePendingPages(change.name)
-
-							if (changes) {
-								await this.compressRevisions(WikiDot.normalizeName(change.name))
-							}
-						})
-					}
-				}
-			}
-
-			const worker = async () => {
-				while (tasks.length != 0) {
-					await tasks.pop()()
-				}
-			}
-
-			await Promise.allSettled([
-				worker(),
-				worker(),
-				worker(),
-				worker(),
-				worker(),
-				worker(),
-				worker(),
-				worker(),
-			])
-
-			if (onceUnseen && !onceFetch && this.localMeta.data.full_scan) {
-				this.log(`Finished renewing all changed pages`)
-				this.localMeta.data.last_page = 0
-				this.localMeta.markDirty()
-				break
-			//} else if (changes.length < this.localMeta.data.last_pagenation) {
-			} else if (changes.length == 0) {
-				this.log(`Reached end of entire wiki history`)
-				this.localMeta.data.full_scan = true
-				this.localMeta.data.last_page = 0
-				this.localMeta.markDirty()
-				break
-			} else {
-				this.localMeta.data.last_page = page
-				this.localMeta.markDirty()
+			if (pageMatch != null) {
+				pages.push(parseInt(pageMatch[1]))
 			}
 		}
+
+		this.log(`Fetching sitemaps: ${pages.join(', ')}`)
+
+		const sitemapPages: [string, Date | null][] = []
+
+		for (const num of pages) {
+			this.log(`Fetching sitemap №${num}`)
+			const sitemap = (await this.client.get(`${this.url}/sitemap_page_${num}.xml`)).toString('utf-8')
+
+			for (const elem of parse(sitemap).querySelectorAll('url')) {
+				let loc = elem.querySelector('loc')?.textContent
+				const lastmodElem = elem.querySelector('lastmod')
+				const lastmod = lastmodElem != null ? new Date(lastmodElem.textContent) : null
+
+				if (loc == undefined) {
+					continue
+				}
+
+				if (loc.startsWith(this.url)) {
+					// domain match
+					loc = loc.substring(this.url.length)
+				} else if (loc.startsWith('http')) {
+					// domain does not match, assume we have custom domain
+					// e.g. scpfoundation.net redirects us to scp-ru.wikidot.com
+					const parsedURL = new URL(loc)
+					loc = parsedURL.pathname.substring(1)
+				}
+
+				if (loc == '' || loc == '/') {
+					loc = 'main'
+				}
+
+				if (loc.startsWith('/')) {
+					loc = loc.substring(1)
+				}
+
+				sitemapPages.push([loc, lastmod])
+			}
+		}
+
+		this.log(`Counting total ${sitemapPages.length} pages`)
+
+		const tasks: any[] = []
+
+		for (const [pageName, pageUpdate] of sitemapPages) {
+			tasks.push(async () => {
+				let metadata = await this.loadPageMetadata(pageName)
+
+				if (
+					metadata == null ||
+					pageUpdate == null || // always check
+					metadata.sitemap_update != pageUpdate.getTime() ||
+					metadata.page_id == undefined ||
+					metadata.version == undefined ||
+					metadata.version < 8
+				) {
+					//this.log(`Need to renew ${pageName} (updated ${pageUpdate == null ? 'always invalid' : pageUpdate} vs ${metadata == null || metadata.sitemap_update == undefined ? 'never' : new Date(metadata.sitemap_update)})`)
+					this.log(`Need to renew ${pageName}`)
+
+					let pageMeta: GenericPageData
+
+					try {
+						pageMeta = await this.fetchGeneric(pageName)
+					} catch(err) {
+						this.log(`Encountered ${err}, postproning page ${pageName} for late fetch`)
+						this.pushPendingPages(pageName)
+						return
+					}
+
+					if (pageMeta.page_id != undefined) {
+						let newMeta: PageMeta
+
+						if (metadata == null || metadata.page_id != -1 && metadata.page_id != pageMeta.page_id) {
+							newMeta = {
+								name: pageName,
+								version: 8,
+								revisions: [],
+								page_id: pageMeta.page_id,
+							}
+						} else {
+							newMeta = {
+								name: pageName,
+								version: 8,
+								revisions: metadata.revisions,
+								page_id: metadata.page_id,
+								votings: metadata.votings,
+							}
+						}
+
+						newMeta.rating = pageMeta.rating
+						newMeta.forum_thread = pageMeta.forum_thread
+						newMeta.tags = pageMeta.tags
+						newMeta.title = pageMeta.page_name
+
+						if (pageUpdate != null) {
+							newMeta.sitemap_update = pageUpdate.getTime()
+						}
+
+						for (let i0 = 0; i0 < 3; i0++) {
+							try {
+								newMeta.votings = await this.fetchPageVoters(pageMeta.page_id)
+								break
+							} catch(err) {
+								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
+							}
+						}
+
+						const lastRevision = findMostRevision(newMeta.revisions)
+						const changes = lastRevision == null ? await this.fetchPageChangeListAllForce(pageMeta.page_id) : await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, lastRevision)
+
+						for (const localChange of changes) {
+							newMeta.revisions.push(localChange)
+						}
+
+						await this.writePageMetadata(pageName, newMeta)
+						metadata = newMeta
+					}
+				}
+
+				if (metadata == null || metadata.page_id == undefined) {
+					this.pushPendingPages(pageName)
+					return
+				}
+
+				let fetchFilesOnce = false
+				const revisionsToFetch: PageRevision[] = []
+				const localRevs = await this.revisionList(pageName)
+
+				for (const key in metadata.revisions) {
+					const rev = metadata.revisions[key]
+
+					if (!localRevs.includes(rev.revision)) {
+						if (!fetchFilesOnce) {
+							fetchFilesOnce = true
+							this.fetchFilesFor(metadata.page_id)
+						}
+
+						revisionsToFetch.push(rev)
+					}
+				}
+
+				const changes = revisionsToFetch.length != 0
+				flipArray(revisionsToFetch)
+
+				const worker = async () => {
+					while (true) {
+						const rev = revisionsToFetch.pop()
+
+						if (rev == undefined) {
+							break
+						}
+
+						for (let i0 = 0; i0 < 2; i0++) {
+							try {
+								this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageName}`)
+								const body = await this.fetchRevision(rev.global_revision)
+								await this.writeRevision(pageName, rev.revision, body)
+
+								if (rev.global_revision in this.pendingRevisions.data) {
+									delete this.pendingRevisions.data[rev.global_revision]
+									this.pendingRevisions.markDirty()
+								}
+							} catch(err) {
+								this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageName} for later fetch`)
+								this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
+								this.pendingRevisions.markDirty()
+							}
+						}
+					}
+				}
+
+				await Promise.allSettled([
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+				])
+
+				this.removePendingPages(pageName)
+				await this.writePageMetadata(pageName, metadata)
+
+				if (changes) {
+					await this.compressRevisions(WikiDot.normalizeName(pageName))
+				}
+			})
+		}
+
+		const worker = async () => {
+			while (tasks.length != 0) {
+				await tasks.pop()()
+			}
+		}
+
+		await Promise.allSettled([
+			worker(),
+			worker(),
+			worker(),
+			worker(),
+			worker(),
+			worker(),
+			worker(),
+			worker(),
+		])
 
 		this.log(`Fetching forums list`)
 		const forums = await this.fetchForumCategories()
@@ -2312,19 +2316,22 @@ export class WikiDot {
 
 	public async markPageReplaced(page: string) {
 		try {
-			await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
+			// await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
+			await promises.unlink(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}.7z`)
+			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}.7z`)
+			await promises.unlink(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
+			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
+			await promises.rm(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
 			// this.error(String(err))
 		}
