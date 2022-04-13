@@ -77,6 +77,7 @@ interface PageMeta {
 	title?: string
 	votings?: [User, boolean][]
 	sitemap_update?: number
+	files: FileMeta[]
 }
 
 interface GenericPageData {
@@ -1311,12 +1312,6 @@ export class WikiDot {
 	private downloadingFiles = new Map<string, boolean>()
 	private static localFileMatch = /\/local--files\/(.+)/i
 
-	public async fetchAndWriteFilesMeta(page_id: number) {
-		for (const fileMeta of await this.fetchFileMetaList(page_id)) {
-			await this.writeFileMeta(fileMeta.url.match(WikiDot.localFileMatch)![1], fileMeta)
-		}
-	}
-
 	private static splitFilePath(path: string): [string[], string, string] {
 		const split = path.split('/')
 
@@ -1364,7 +1359,7 @@ export class WikiDot {
 		return false
 	}
 
-	private async fetchFileInner(fileMeta: FileMeta, split: string[], recombined: string, config?: RequestConfig) {
+	private async fetchFileInner(fileMeta: {url: string, file_id: number}, split: string[], recombined: string, config?: RequestConfig) {
 		this.log(`Fetching file ${fileMeta.url}`)
 
 		await this.client.get(fileMeta.url, config).then(async buffer => {
@@ -1379,13 +1374,14 @@ export class WikiDot {
 
 	public async fetchFilesFor(page_id: number) {
 		await this.initialize()
+		const metadata = []
 
 		for (const fileMeta of await this.fetchFileMetaListForce(page_id)) {
 			const match = WikiDot.splitFilePathRaw(fileMeta.url)
 
 			if (match != null) {
 				const [matched, split, last, recombined] = match
-				await this.writeFileMeta(matched, fileMeta)
+				metadata.push(fileMeta)
 
 				if (this.downloadingFiles.has(matched)) {
 					continue
@@ -1405,6 +1401,8 @@ export class WikiDot {
 				})
 			}
 		}
+
+		return metadata
 	}
 
 	public async fetchFilesFrom(body: string, page_id?: number) {
@@ -1541,20 +1539,20 @@ export class WikiDot {
 		const list = []
 
 		for (const file_id of await this.fetchFileList(page_id)) {
-			list.push(await this.fetchFileMeta(file_id))
+			list.push(this.fetchFileMeta(file_id))
 		}
 
-		return list
+		return await Promise.all(list)
 	}
 
 	public async fetchFileMetaListForce(page_id: number) {
 		const list = []
 
 		for (const file_id of await this.fetchFileListForce(page_id)) {
-			list.push(await this.fetchFileMetaForce(file_id))
+			list.push(this.fetchFileMetaForce(file_id))
 		}
 
-		return list
+		return await Promise.all(list)
 	}
 
 	public async workLoop() {
@@ -1630,7 +1628,7 @@ export class WikiDot {
 					metadata.sitemap_update != pageUpdate.getTime() ||
 					metadata.page_id == undefined ||
 					metadata.version == undefined ||
-					metadata.version < 8
+					metadata.version < 9
 				) {
 					//this.log(`Need to renew ${pageName} (updated ${pageUpdate == null ? 'always invalid' : pageUpdate} vs ${metadata == null || metadata.sitemap_update == undefined ? 'never' : new Date(metadata.sitemap_update)})`)
 					this.log(`Need to renew ${pageName}`)
@@ -1651,15 +1649,17 @@ export class WikiDot {
 						if (metadata == null || metadata.page_id != -1 && metadata.page_id != pageMeta.page_id) {
 							newMeta = {
 								name: pageName,
-								version: 8,
+								version: 9,
 								revisions: [],
+								files: [],
 								page_id: pageMeta.page_id,
 							}
 						} else {
 							newMeta = {
 								name: pageName,
-								version: 8,
+								version: 9,
 								revisions: metadata.revisions,
+								files: metadata.files != undefined ? metadata.files : [],
 								page_id: metadata.page_id,
 								votings: metadata.votings,
 							}
@@ -1683,6 +1683,15 @@ export class WikiDot {
 							}
 						}
 
+						for (let i0 = 0; i0 < 3; i0++) {
+							try {
+								newMeta.files = await this.fetchFilesFor(pageMeta.page_id)
+								break
+							} catch(err) {
+								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
+							}
+						}
+
 						const lastRevision = findMostRevision(newMeta.revisions)
 						const changes = lastRevision == null ? await this.fetchPageChangeListAllForce(pageMeta.page_id) : await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, lastRevision)
 
@@ -1700,7 +1709,6 @@ export class WikiDot {
 					return
 				}
 
-				let fetchFilesOnce = false
 				const revisionsToFetch: PageRevision[] = []
 				const localRevs = await this.revisionList(pageName)
 
@@ -1708,11 +1716,6 @@ export class WikiDot {
 					const rev = metadata.revisions[key]
 
 					if (!localRevs.includes(rev.revision)) {
-						if (!fetchFilesOnce) {
-							fetchFilesOnce = true
-							this.fetchFilesFor(metadata.page_id)
-						}
-
 						revisionsToFetch.push(rev)
 					}
 				}
@@ -2011,7 +2014,6 @@ export class WikiDot {
 					if (match != null) {
 						const [matched, split, last] = match
 						this.writeToFileMap(fetchedMeta, split, last)
-						await this.writeFileMeta(matched, fetchedMeta)
 						mapped = this.fileMap.data[id]
 					}
 				}
@@ -2021,14 +2023,7 @@ export class WikiDot {
 					continue
 				}
 
-				const readMeta = await this.loadFileMeta(mapped.path)
-
-				if (readMeta == null) {
-					this.log(`Unexpected missing metadata of file ${id}`)
-					continue
-				}
-
-				const match = WikiDot.splitFilePathRaw(readMeta.url)
+				const match = WikiDot.splitFilePathRaw(mapped.url)
 
 				if (match != null) {
 					const [matched, split, last, recombined] = match
@@ -2037,7 +2032,7 @@ export class WikiDot {
 						continue
 					}
 
-					this.fetchFileInner(readMeta, split, recombined, {
+					this.fetchFileInner({url: mapped.url, file_id: id}, split, recombined, {
 						headers: {
 							'Cache-Control': 'no-cache',
 							'Referer': this.url
@@ -2333,11 +2328,5 @@ export class WikiDot {
 		} catch(err) {
 			return null
 		}
-	}
-
-	public async writeFileMeta(path: string, meta: FileMeta) {
-		const [split, last, recombined] = WikiDot.splitFilePath(path)
-		await promises.mkdir(`${this.workingDirectory}/meta/files/${split.join('/')}`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/files/${recombined}.json`, JSON.stringify(meta, null, 4))
 	}
 }
