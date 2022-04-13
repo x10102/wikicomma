@@ -1560,56 +1560,61 @@ export class WikiDot {
 	public async workLoop() {
 		await this.initialize()
 
-		this.log(`Fetching sitemap.xml`)
-		const sitemap = (await this.client.get(`${this.url}/sitemap.xml`)).toString('utf-8')
-		const pages = []
-
-		for (const loc of parse(sitemap).querySelectorAll('loc')) {
-			const pageMatch = loc.textContent.match(/_page_([0-9]+)\.xml$/)
-
-			if (pageMatch != null) {
-				pages.push(parseInt(pageMatch[1]))
-			}
-		}
-
-		this.log(`Fetching sitemaps: ${pages.join(', ')}`)
-
+		this.log(`Fetching sitemap`)
 		const sitemapPages: [string, Date | null][] = []
 
-		for (const num of pages) {
-			this.log(`Fetching sitemap №${num}`)
-			const sitemap = (await this.client.get(`${this.url}/sitemap_page_${num}.xml`)).toString('utf-8')
+		const fetchSiteMap = async (url: string) => {
+			const sitemap = (await this.client.get(url)).toString('utf-8')
+			const xml = parse(sitemap)
 
-			for (const elem of parse(sitemap).querySelectorAll('url')) {
-				let loc = elem.querySelector('loc')?.textContent
-				const lastmodElem = elem.querySelector('lastmod')
-				const lastmod = lastmodElem != null ? new Date(lastmodElem.textContent) : null
+			for (const submap of xml.querySelectorAll('sitemap')) {
+				for (const loc of submap.querySelectorAll('loc')) {
+					const pageMatch = loc.textContent.match(/_page_([0-9]+)\.xml$/)
 
-				if (loc == undefined) {
-					continue
+					if (pageMatch != null) {
+						await fetchSiteMap(loc.textContent)
+					}
 				}
+			}
 
-				if (loc.startsWith(this.url)) {
-					// domain match
-					loc = loc.substring(this.url.length)
-				} else if (loc.startsWith('http')) {
-					// domain does not match, assume we have custom domain
-					// e.g. scpfoundation.net redirects us to scp-ru.wikidot.com
-					const parsedURL = new URL(loc)
-					loc = parsedURL.pathname.substring(1)
+			for (const urlset of xml.querySelectorAll('urlset')) {
+				for (const elem of urlset.querySelectorAll('url')) {
+					let loc = elem.querySelector('loc')?.textContent
+					const lastmodElem = elem.querySelector('lastmod')
+					const lastmod = lastmodElem != null ? new Date(lastmodElem.textContent) : null
+
+					if (loc == undefined) {
+						continue
+					}
+
+					if (loc.startsWith(this.url)) {
+						// domain match
+						loc = loc.substring(this.url.length)
+					} else if (loc.startsWith('http')) {
+						// domain does not match, assume we have custom domain
+						// e.g. scpfoundation.net redirects us to scp-ru.wikidot.com
+						const parsedURL = new URL(loc)
+						loc = parsedURL.pathname.substring(1)
+					}
+
+					if (loc == '' || loc == '/') {
+						loc = 'main'
+					}
+
+					if (loc.startsWith('/forum')) {
+						continue
+					}
+
+					if (loc.startsWith('/')) {
+						loc = loc.substring(1)
+					}
+
+					sitemapPages.push([loc, lastmod])
 				}
-
-				if (loc == '' || loc == '/') {
-					loc = 'main'
-				}
-
-				if (loc.startsWith('/')) {
-					loc = loc.substring(1)
-				}
-
-				sitemapPages.push([loc, lastmod])
 			}
 		}
+
+		await fetchSiteMap(`${this.url}/sitemap.xml`)
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
 
