@@ -17,8 +17,10 @@ interface DaemonConfig {
 		process.exit(1)
 	}
 
+	const tasks: any[] = []
+
 	for (let {name, url} of config.wikis) {
-		(async function() {
+		tasks.push(async function() {
 			try {
 				if (url.endsWith('/')) { // Some of wikidot parts don't like double slash
 					url = url.substring(0, url.length - 1)
@@ -31,6 +33,18 @@ interface DaemonConfig {
 				console.error(`Fetching wiki ${name} failed`)
 				console.error(err)
 			}
-		})()
+		})
 	}
+
+	async function worker() {
+		while (tasks.length != 0) {
+			await tasks.pop()()
+		}
+	}
+
+	await Promise.allSettled([
+		worker(),
+		worker(),
+		worker(),
+	])
 })()
