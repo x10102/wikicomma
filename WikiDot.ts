@@ -1654,6 +1654,8 @@ export class WikiDot {
 								files: [],
 								page_id: pageMeta.page_id,
 							}
+
+							await this.markPageReplaced(pageName)
 						} else {
 							newMeta = {
 								name: pageName,
