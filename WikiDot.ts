@@ -416,24 +416,6 @@ export class WikiDot {
 	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this.workingDirectory}/meta/file_map.json`)
 	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this.workingDirectory}/meta/pending_revisions.json`)
 
-	private localMeta: DiskMeta<LocalWikiMeta> = new DiskMeta({
-		last_page: 0,
-		full_scan: false,
-		last_pagenation: 1000 // WikiDot.defaultPagenation
-	}, `${this.workingDirectory}/meta/local.json`, v => {
-		if (typeof v != 'object') {
-			v = {}
-		}
-
-		v.full_scan = v.full_scan != undefined ? v.full_scan : false
-		v.last_page = v.last_page != undefined ? v.last_page : 0
-		// 1000 for overcoming slowness of huge offsets
-		// (searching the data is much slower than actually building response on server)
-		v.last_pagenation = v.last_pagenation != undefined ? v.last_pagenation : 1000 // WikiDot.defaultPagenation
-
-		return v
-	})
-
 	private pushPendingFiles(...files: number[]) {
 		for (const value of files) {
 			if (pushToSet(this.pendingFiles.data, value)) {
@@ -469,7 +451,6 @@ export class WikiDot {
 	public startMetaSyncTimer(timeout = 2000) {
 		this.pendingFiles.startTimer(timeout)
 		this.pendingPages.startTimer(timeout)
-		this.localMeta.startTimer(timeout)
 		this.fileMap.startTimer(timeout)
 		this.pendingRevisions.startTimer(timeout)
 	}
@@ -477,7 +458,6 @@ export class WikiDot {
 	public stopMetaSyncTimer() {
 		this.pendingFiles.stopTimer()
 		this.pendingPages.stopTimer()
-		this.localMeta.stopTimer()
 		this.fileMap.stopTimer()
 		this.pendingRevisions.stopTimer()
 	}
@@ -486,7 +466,6 @@ export class WikiDot {
 		return Promise.all([
 			this.pendingFiles.sync(),
 			this.pendingPages.sync(),
-			this.localMeta.sync(),
 			this.fileMap.sync(),
 			this.pendingRevisions.sync(),
 		])
@@ -513,7 +492,6 @@ export class WikiDot {
 			this.loadCookies(),
 			this.pendingFiles.initialize(),
 			this.pendingPages.initialize(),
-			this.localMeta.initialize(),
 			this.fileMap.initialize(),
 			this.pendingRevisions.initialize(),
 		])
@@ -1581,9 +1559,6 @@ export class WikiDot {
 
 	public async workLoop() {
 		await this.initialize()
-
-		let page = this.localMeta.data.last_page
-		const seen = new Map<string, boolean>()
 
 		this.log(`Fetching sitemap.xml`)
 		const sitemap = (await this.client.get(`${this.url}/sitemap.xml`)).toString('utf-8')
