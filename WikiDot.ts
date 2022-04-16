@@ -24,7 +24,7 @@
 import { encode } from "querystring"
 import { HTTPClient, RequestConfig } from './HTTPClient'
 import { parse, HTMLElement, TextNode } from 'node-html-parser'
-import { promises } from 'fs'
+import { promises, read } from 'fs'
 import { promisify } from 'util'
 import { unescape } from 'html-escaper'
 import Seven, { list } from 'node-7z'
@@ -855,7 +855,7 @@ export class WikiDot {
 	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
 
 	public async fetchGeneric(page: string) {
-		const result = await this.client.get(`${this.url}/${page}?_ts=${Date.now()}`, {
+		const result = await this.client.get(`${this.url}/${page}/noredirect/true?_ts=${Date.now()}`, {
 			followRedirects: false,
 			headers: {
 				'Referer': this.url,
@@ -1627,10 +1627,29 @@ export class WikiDot {
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
 
+		const oldMap = await this.loadSiteMap()
+
+		if (oldMap == null) {
+			this.log(`No previous sitemap was found, doing full scan`)
+		} else {
+			this.log(`Previous sitemap contains ${oldMap.size} pages`)
+		}
+
 		const tasks: any[] = []
 
 		for (const [pageName, pageUpdate] of sitemapPages) {
 			tasks.push(async () => {
+				if (oldMap != null) {
+					const oldStamp = oldMap.get(pageName)
+
+					if (oldStamp === pageUpdate || pageUpdate != null && oldStamp === pageUpdate.getTime()) {
+						if (await this.pageMetadataExists(pageName)) {
+							// consider it fetched, since sitemap is written to disk only when everything got saved
+							return
+						}
+					}
+				}
+
 				let metadata = await this.loadPageMetadata(pageName)
 
 				if (
@@ -1757,6 +1776,8 @@ export class WikiDot {
 									delete this.pendingRevisions.data[rev.global_revision]
 									this.pendingRevisions.markDirty()
 								}
+
+								break
 							} catch(err) {
 								this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageName} for later fetch`)
 								this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
@@ -1806,6 +1827,8 @@ export class WikiDot {
 			worker(),
 			worker(),
 		])
+
+		await this.writeSiteMap(sitemapPages)
 
 		this.log(`Fetching forums list`)
 		const forums = await this.fetchForumCategories()
@@ -2056,6 +2079,76 @@ export class WikiDot {
 						}
 					})
 				}
+			}
+		}
+
+		{
+			const copy: [number, number][] = []
+
+			for (const global_revision in this.pendingRevisions.data) {
+				const page_id = this.pendingRevisions.data[global_revision]
+				copy.push([parseInt(global_revision), page_id])
+			}
+
+			if (copy.length != 0) {
+				this.log(`Fetching pending revisions`)
+				this.log(`Collecting fetched pages mapping, this can take a while...`)
+
+				const mapping = new Map<number, PageMeta>()
+
+				for (const name of await promises.readdir(`${this.workingDirectory}/meta/pages/`)) {
+					if (name.endsWith('.json') && (await promises.stat(`${this.workingDirectory}/meta/pages/${name}`)).isFile()) {
+						const readFile: PageMeta = JSON.parse(await promises.readFile(`${this.workingDirectory}/meta/pages/${name}`, {encoding: 'utf-8'}))
+
+						for (const [_, page_id] of copy) {
+							if (page_id == readFile.page_id) {
+								mapping.set(readFile.page_id, readFile)
+								break
+							}
+						}
+					}
+				}
+
+				this.log(`Mapped.`)
+
+				for (const [global_revision, page_id] of copy) {
+					const pageMeta = mapping.get(page_id)
+
+					if (pageMeta == undefined) {
+						this.error(`Unknown page with id ${page_id} when resolving pending revision!`)
+						continue
+					}
+
+					let rev: PageRevision | undefined = undefined
+
+					for (const prev of pageMeta.revisions) {
+						if (prev.global_revision == global_revision) {
+							rev = prev
+							break
+						}
+					}
+
+					if (rev == undefined) {
+						this.error(`Unknown revision with id ${global_revision} inside ${pageMeta.name} (${[pageMeta.page_id]}) when resolving pending revision!`)
+						continue
+					}
+
+					for (let i0 = 0; i0 < 2; i0++) {
+						try {
+							this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageMeta.name}`)
+							const body = await this.fetchRevision(rev.global_revision)
+							await this.writeRevision(pageMeta.name, rev.revision, body)
+							delete this.pendingRevisions.data[rev.global_revision]
+							this.pendingRevisions.markDirty()
+
+							break
+						} catch(err) {
+							this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
+						}
+					}
+				}
+
+				this.log(`Fetched all pending revisions!`)
 			}
 		}
 
@@ -2310,6 +2403,14 @@ export class WikiDot {
 		}
 	}
 
+	public async pageMetadataExists(page: string) {
+		try {
+			return (await promises.stat(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)).isFile()
+		} catch(err) {
+			return false
+		}
+	}
+
 	public async markPageReplaced(page: string) {
 		try {
 			// await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
@@ -2342,6 +2443,39 @@ export class WikiDot {
 		try {
 			const read = await promises.readFile(`${this.workingDirectory}/meta/files/${path}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as FileMeta
+		} catch(err) {
+			return null
+		}
+	}
+
+	public async writeSiteMap(map: [string, Date | null][]) {
+		await promises.mkdir(`${this.workingDirectory}/meta`, {recursive: true})
+
+		const rebuild: any = {}
+
+		for (const [a, b] of map) {
+			if (b == null) {
+				rebuild[a] = b
+			} else {
+				rebuild[a] = b.getTime()
+			}
+		}
+
+		await promises.writeFile(`${this.workingDirectory}/meta/sitemap.json`, JSON.stringify(map, null, 4))
+	}
+
+	public async loadSiteMap() {
+		try {
+			const read = await promises.readFile(`${this.workingDirectory}/meta/sitemap.json`, {encoding: 'utf-8'})
+			const json: any = JSON.parse(read)
+
+			const remapped = new Map<string, number | null>()
+
+			for (const a in json) {
+				remapped.set(a, json[a])
+			}
+
+			return remapped
 		} catch(err) {
 			return null
 		}
