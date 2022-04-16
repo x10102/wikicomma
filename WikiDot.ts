@@ -2195,7 +2195,7 @@ export class WikiDot {
 						const pageMeta = mapping.get(page_id)
 
 						if (pageMeta == undefined) {
-							this.error(`Unknown page with id ${page_id} when resolving pending revision! Considering revision unresolvable.`)
+							this.error(`Unknown page with id ${page_id} when resolving pending revision! Considering revision ${global_revision} unresolvable.`)
 							delete this.pendingRevisions.data[global_revision]
 							this.pendingRevisions.markDirty()
 							return
