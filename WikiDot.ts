@@ -2158,10 +2158,11 @@ export class WikiDot {
 
 				for (const page_id in this.pageIdMap.data) {
 					const num = parseInt(page_id)
-					let hit = false
+					let hit = true
 
 					for (const [_, page_id] of copy) {
 						if (num == page_id) {
+							hit = false
 							const page_name = this.pageIdMap.data[page_id]
 							const metadata = await this.loadPageMetadata(page_name)
 
