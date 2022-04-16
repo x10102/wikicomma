@@ -2461,7 +2461,7 @@ export class WikiDot {
 			}
 		}
 
-		await promises.writeFile(`${this.workingDirectory}/meta/sitemap.json`, JSON.stringify(map, null, 4))
+		await promises.writeFile(`${this.workingDirectory}/meta/sitemap.json`, JSON.stringify(rebuild, null, 4))
 	}
 
 	public async loadSiteMap() {
