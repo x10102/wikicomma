@@ -2187,19 +2187,6 @@ export class WikiDot {
 					}
 				}
 
-				for (const name of await promises.readdir(`${this.workingDirectory}/meta/pages/`)) {
-					if (name.endsWith('.json') && (await promises.stat(`${this.workingDirectory}/meta/pages/${name}`)).isFile()) {
-						const readFile: PageMeta = JSON.parse(await promises.readFile(`${this.workingDirectory}/meta/pages/${name}`, {encoding: 'utf-8'}))
-
-						for (const [_, page_id] of copy) {
-							if (page_id == readFile.page_id) {
-								mapping.set(readFile.page_id, readFile)
-								break
-							}
-						}
-					}
-				}
-
 				const tasks: any[] = []
 
 				for (const [global_revision, page_id] of copy) {
