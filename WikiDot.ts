@@ -1676,7 +1676,8 @@ export class WikiDot {
 					}
 
 					if (loc == '' || loc == '/') {
-						loc = 'main'
+						// loc = 'main'
+						continue
 					}
 
 					if (loc.startsWith('/forum/') || loc.startsWith('forum/')) {
