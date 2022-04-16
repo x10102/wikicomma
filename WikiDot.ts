@@ -1387,11 +1387,11 @@ export class WikiDot {
 		})
 	}
 
-	public async fetchFilesFor(page_id: number) {
+	public async fetchFilesFor(page_id: number, existing: FileMeta[] = []) {
 		await this.initialize()
 		const metadata = []
 
-		for (const fileMeta of await this.fetchFileMetaListForce(page_id)) {
+		for (const fileMeta of await this.fetchFileMetaListForce(page_id, existing)) {
 			const match = WikiDot.splitFilePathRaw(fileMeta.url)
 
 			if (match != null) {
@@ -1560,14 +1560,29 @@ export class WikiDot {
 		return await Promise.all(list)
 	}
 
-	public async fetchFileMetaListForce(page_id: number) {
+	public async fetchFileMetaListForce(page_id: number, existing: FileMeta[] = []) {
 		const list = []
+		const list2 = []
 
 		for (const file_id of await this.fetchFileListForce(page_id)) {
-			list.push(this.fetchFileMetaForce(file_id))
+			let hit = false
+
+			for (const emeta of existing) {
+				if (emeta.file_id == file_id) {
+					hit = true
+					break
+				}
+			}
+
+			if (!hit) {
+				list.push(this.fetchFileMetaForce(file_id))
+			}
 		}
 
-		return await Promise.all(list)
+		list2.push(...existing)
+		list2.push(...(await Promise.all(list)))
+
+		return list2
 	}
 
 	public async workLoop() {
@@ -1781,7 +1796,7 @@ export class WikiDot {
 
 						for (let i0 = 0; i0 < 3; i0++) {
 							try {
-								newMeta.files = await this.fetchFilesFor(pageMeta.page_id)
+								newMeta.files = await this.fetchFilesFor(pageMeta.page_id, newMeta.files)
 								break
 							} catch(err) {
 								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
