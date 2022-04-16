@@ -855,7 +855,14 @@ export class WikiDot {
 	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
 
 	public async fetchGeneric(page: string) {
-		const result = await this.client.get(`${this.url}/${page}?_ts=${Date.now()}`, {followRedirects: false})
+		const result = await this.client.get(`${this.url}/${page}?_ts=${Date.now()}`, {
+			followRedirects: false,
+			headers: {
+				'Referer': this.url,
+				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
+			}
+		})
+
 		const html = parse(result.toString('utf-8'))
 		const meta: GenericPageData = {}
 
@@ -1655,7 +1662,10 @@ export class WikiDot {
 								page_id: pageMeta.page_id,
 							}
 
-							await this.markPageReplaced(pageName)
+							if (metadata != null) {
+								this.log(`Page ${pageName} got replaced`)
+								await this.markPageReplaced(pageName)
+							}
 						} else {
 							newMeta = {
 								name: pageName,
@@ -2037,7 +2047,8 @@ export class WikiDot {
 					this.fetchFileInner({url: mapped.url, file_id: id}, split, recombined, {
 						headers: {
 							'Cache-Control': 'no-cache',
-							'Referer': this.url
+							'Referer': this.url,
+							'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
 						}
 					})
 				}
