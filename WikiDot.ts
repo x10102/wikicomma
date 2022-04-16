@@ -354,12 +354,6 @@ class DiskMeta<T> {
 	}
 }
 
-interface LocalWikiMeta {
-	last_page: number
-	last_pagenation: number
-	full_scan: boolean
-}
-
 interface FileMap {
 	[key: string]: {url: string, path: string}
 }
@@ -367,6 +361,11 @@ interface FileMap {
 interface PendingRevisions {
 	// revision -> page
 	[key: string]: number
+}
+
+interface PageIdMap {
+	// id -> name
+	[key: string]: string
 }
 
 export class WikiDot {
@@ -415,6 +414,7 @@ export class WikiDot {
 	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_files.json`)
 	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_pages.json`)
 	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this.workingDirectory}/meta/file_map.json`)
+	private pageIdMap: DiskMeta<PageIdMap> = new DiskMeta({}, `${this.workingDirectory}/meta/page_id_map.json`)
 	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this.workingDirectory}/meta/pending_revisions.json`)
 
 	private pushPendingFiles(...files: number[]) {
@@ -454,6 +454,7 @@ export class WikiDot {
 		this.pendingPages.startTimer(timeout)
 		this.fileMap.startTimer(timeout)
 		this.pendingRevisions.startTimer(timeout)
+		this.pageIdMap.startTimer(timeout)
 	}
 
 	public stopMetaSyncTimer() {
@@ -461,6 +462,7 @@ export class WikiDot {
 		this.pendingPages.stopTimer()
 		this.fileMap.stopTimer()
 		this.pendingRevisions.stopTimer()
+		this.pageIdMap.stopTimer()
 	}
 
 	public syncMeta() {
@@ -469,6 +471,7 @@ export class WikiDot {
 			this.pendingPages.sync(),
 			this.fileMap.sync(),
 			this.pendingRevisions.sync(),
+			this.pageIdMap.sync(),
 		])
 	}
 
@@ -495,6 +498,7 @@ export class WikiDot {
 			this.pendingPages.initialize(),
 			this.fileMap.initialize(),
 			this.pendingRevisions.initialize(),
+			this.pageIdMap.initialize(),
 		])
 	}
 
@@ -1569,6 +1573,56 @@ export class WikiDot {
 	public async workLoop() {
 		await this.initialize()
 
+		{
+			let mapNeedsRebuild = true
+
+			try {
+				mapNeedsRebuild = (await promises.stat(`${this.workingDirectory}/meta/pages`)).isDirectory()
+			} catch(err) {
+				mapNeedsRebuild = false
+			}
+
+			if (mapNeedsRebuild) {
+				for (const _ in this.pageIdMap.data) {
+					mapNeedsRebuild = false
+					break
+				}
+			}
+
+			if (mapNeedsRebuild) {
+				this.log(`Page id map is empty, gotta populate it...`)
+
+				const tasks: any[] = []
+
+				for (const name of await promises.readdir(`${this.workingDirectory}/meta/pages/`)) {
+					if (name.endsWith('.json')) {
+						tasks.push(async () => {
+							const metadata: PageMeta = JSON.parse(await promises.readFile(`${this.workingDirectory}/meta/pages/${name}`, {encoding: 'utf-8'}))
+
+							if (metadata != null) {
+								this.pageIdMap.data[metadata.page_id] = metadata.name
+								this.pageIdMap.markDirty()
+							} else {
+								this.error(`${this.workingDirectory}/meta/pages/${name} is malformed!`)
+							}
+						})
+					}
+				}
+
+				const worker = async () => {
+					while (tasks.length != 0) {
+						await tasks.pop()()
+					}
+				}
+
+				await Promise.all([
+					worker(),
+					worker(),
+					worker(),
+				])
+			}
+		}
+
 		this.log(`Fetching sitemap`)
 		const sitemapPages: [string, Date | null][] = []
 
@@ -1688,6 +1742,8 @@ export class WikiDot {
 							if (metadata != null) {
 								this.log(`Page ${pageName} got replaced`)
 								await this.markPageReplaced(pageName)
+								delete this.pageIdMap.data[metadata.page_id]
+								this.pageIdMap.markDirty()
 							}
 						} else {
 							newMeta = {
@@ -1698,6 +1754,11 @@ export class WikiDot {
 								page_id: metadata.page_id,
 								votings: metadata.votings,
 							}
+						}
+
+						if (this.pageIdMap.data[newMeta.page_id] !== newMeta.name) {
+							this.pageIdMap.data[newMeta.page_id] = newMeta.name
+							this.pageIdMap.markDirty()
 						}
 
 						newMeta.rating = pageMeta.rating
@@ -2092,9 +2153,39 @@ export class WikiDot {
 
 			if (copy.length != 0) {
 				this.log(`Fetching pending revisions`)
-				this.log(`Collecting fetched pages mapping, this can take a while...`)
 
 				const mapping = new Map<number, PageMeta>()
+
+				for (const page_id in this.pageIdMap.data) {
+					const num = parseInt(page_id)
+					let hit = false
+
+					for (const [_, page_id] of copy) {
+						if (num == page_id) {
+							const page_name = this.pageIdMap.data[page_id]
+							const metadata = await this.loadPageMetadata(page_name)
+
+							if (metadata != null) {
+								if (metadata.page_id != num) {
+									this.error(`yo dude what the fuck`)
+									this.error(`Page map match ID ${num} against ${page_name}, but ${page_name} in pages/ has ID of ${metadata.page_id}`)
+									this.pageIdMap.data[metadata.page_id] = metadata.name
+									this.pageIdMap.markDirty()
+									break
+								}
+
+								mapping.set(metadata.page_id, metadata)
+								hit = true
+							}
+
+							break
+						}
+					}
+
+					if (!hit) {
+						this.error(`Unable to find page metadata for ${page_id}!!!`)
+					}
+				}
 
 				for (const name of await promises.readdir(`${this.workingDirectory}/meta/pages/`)) {
 					if (name.endsWith('.json') && (await promises.stat(`${this.workingDirectory}/meta/pages/${name}`)).isFile()) {
@@ -2108,8 +2199,6 @@ export class WikiDot {
 						}
 					}
 				}
-
-				this.log(`Mapped.`)
 
 				const tasks: any[] = []
 
