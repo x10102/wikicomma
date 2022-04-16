@@ -2111,42 +2111,57 @@ export class WikiDot {
 
 				this.log(`Mapped.`)
 
+				const tasks: any[] = []
+
 				for (const [global_revision, page_id] of copy) {
-					const pageMeta = mapping.get(page_id)
+					tasks.push(async () => {
+						const pageMeta = mapping.get(page_id)
 
-					if (pageMeta == undefined) {
-						this.error(`Unknown page with id ${page_id} when resolving pending revision!`)
-						continue
-					}
-
-					let rev: PageRevision | undefined = undefined
-
-					for (const prev of pageMeta.revisions) {
-						if (prev.global_revision == global_revision) {
-							rev = prev
-							break
+						if (pageMeta == undefined) {
+							this.error(`Unknown page with id ${page_id} when resolving pending revision!`)
+							return
 						}
-					}
 
-					if (rev == undefined) {
-						this.error(`Unknown revision with id ${global_revision} inside ${pageMeta.name} (${[pageMeta.page_id]}) when resolving pending revision!`)
-						continue
-					}
+						let rev: PageRevision | undefined = undefined
 
-					for (let i0 = 0; i0 < 2; i0++) {
+						for (const prev of pageMeta.revisions) {
+							if (prev.global_revision == global_revision) {
+								rev = prev
+								break
+							}
+						}
+
+						if (rev == undefined) {
+							this.error(`Unknown revision with id ${global_revision} inside ${pageMeta.name} (${[pageMeta.page_id]}) when resolving pending revision!`)
+							return
+						}
+
 						try {
 							this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageMeta.name}`)
 							const body = await this.fetchRevision(rev.global_revision)
 							await this.writeRevision(pageMeta.name, rev.revision, body)
 							delete this.pendingRevisions.data[rev.global_revision]
 							this.pendingRevisions.markDirty()
-
-							break
 						} catch(err) {
 							this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
 						}
+					})
+				}
+
+				const worker = async () => {
+					while (tasks.length != 0) {
+						await tasks.pop()()
 					}
 				}
+
+				await Promise.all([
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+					worker(),
+				])
 
 				this.log(`Fetched all pending revisions!`)
 			}
