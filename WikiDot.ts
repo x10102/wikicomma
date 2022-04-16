@@ -27,7 +27,7 @@ import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises } from 'fs'
 import { promisify } from 'util'
 import { unescape } from 'html-escaper'
-import Seven from 'node-7z'
+import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 
@@ -997,7 +997,11 @@ export class WikiDot {
 		const body = await this.client.get(`${this.url}/forum/start/hidden/show`)
 		const html = parse(body.toString('utf-8'))
 
-		const forum = html.querySelector('div.forum-start-box')!
+		const forum = html.querySelector('div.forum-start-box')
+
+		if (forum == null) {
+			return listing
+		}
 
 		for (const table of forum.querySelectorAll('table')) {
 			const rows = table.querySelectorAll('tr')
