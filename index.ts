@@ -1,5 +1,5 @@
 
-import { WikiDot } from './WikiDot'
+import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
 
 interface DaemonConfig {
@@ -18,6 +18,7 @@ interface DaemonConfig {
 	}
 
 	const tasks: any[] = []
+	const lock = new Lock()
 
 	for (let {name, url} of config.wikis) {
 		tasks.push(async function() {
@@ -28,7 +29,7 @@ interface DaemonConfig {
 
 				const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`)
 				await wiki.fetchToken()
-				await wiki.workLoop()
+				await wiki.workLoop(lock)
 			} catch(err) {
 				console.error(`Fetching wiki ${name} failed`)
 				console.error(err)

@@ -368,6 +368,40 @@ interface PageIdMap {
 	[key: string]: string
 }
 
+export class Lock {
+	private locks: any[] = []
+	private _isLocked = false
+
+	public get isLocked() {
+		return this._isLocked
+	}
+
+	public async lock() {
+		return new Promise<void>((resolve, reject) => {
+			if (this._isLocked) {
+				this.locks.push(resolve)
+				return
+			}
+
+			this._isLocked = true
+			resolve()
+		})
+	}
+
+	public async release() {
+		if (!this._isLocked) {
+			throw new Error('Not locked!')
+		}
+
+		this._isLocked = false
+
+		if (this.locks.length != 0) {
+			this._isLocked = true
+			this.locks.splice(0, 1)[0]()
+		}
+	}
+}
+
 export class WikiDot {
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -1585,7 +1619,7 @@ export class WikiDot {
 		return list2
 	}
 
-	public async workLoop() {
+	public async workLoop(lock: Lock) {
 		await this.initialize()
 
 		{
@@ -1638,6 +1672,7 @@ export class WikiDot {
 			}
 		}
 
+		await lock.lock()
 		this.log(`Fetching sitemap`)
 		const sitemapPages: [string, Date | null][] = []
 
@@ -1696,6 +1731,7 @@ export class WikiDot {
 		await fetchSiteMap(`${this.url}/sitemap.xml`)
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
+		lock.release()
 
 		const oldMap = await this.loadSiteMap()
 
