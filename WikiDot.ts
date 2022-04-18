@@ -2304,7 +2304,8 @@ export class WikiDot {
 
 		for (const name of await promises.readdir(`${this.workingDirectory}/pages/`)) {
 			// hidden/system files start with dot
-			if (!name.startsWith('.') && (await promises.stat(`${this.workingDirectory}/pages/${name}`)).isDirectory()) {
+			// shortcut with .7z check to avoid excessive filesystem load
+			if (!name.startsWith('.') && !name.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/pages/${name}`)).isDirectory()) {
 				await this.compressRevisions(name)
 			}
 		}
