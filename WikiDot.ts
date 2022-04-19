@@ -208,6 +208,32 @@ interface LocalPostRevision extends PostRevision {
 	title: string
 }
 
+function findPostRevision(list: LocalPostRevision[], id: number): LocalPostRevision | null {
+	for (const rev of list) {
+		if (rev.id == id) {
+			return rev
+		}
+	}
+
+	return null
+}
+
+function findPost(list: LocalForumPost[], id: number): LocalForumPost | null {
+	for (const rev of list) {
+		if (rev.id == id) {
+			return rev
+		}
+
+		const findRecursive = findPost(rev.children, id)
+
+		if (findRecursive != null) {
+			return findRecursive
+		}
+	}
+
+	return null
+}
+
 interface ForumThread {
 	title: string
 	id: number
@@ -1998,6 +2024,8 @@ export class WikiDot {
 							updated = true
 							this.log(`Fetching thread meta of ${thread.title} (${thread.id})`)
 
+							const oldPosts = localThread != null ? localThread.posts : []
+
 							const newMeta: LocalForumThread = {
 								title: thread.title,
 								id: thread.id,
@@ -2016,8 +2044,7 @@ export class WikiDot {
 							let fetchOnce = false
 
 							const workWithPost = async (post: ForumPost) => {
-								fetchOnce = true
-								await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
+								const oldPost = findPost(oldPosts, post.id)
 
 								const localPost: LocalForumPost = {
 									id: post.id,
@@ -2025,7 +2052,7 @@ export class WikiDot {
 									stamp: post.stamp,
 									lastEdit: post.lastEdit,
 									lastEditBy: post.lastEditBy,
-									revisions: [],
+									revisions: oldPost != null ? oldPost.revisions : [],
 									children: []
 								}
 
@@ -2034,12 +2061,26 @@ export class WikiDot {
 									const revisionList = await this.fetchPostRevisionList(post.id)
 
 									const revWorker = []
+									const existingRevisions = await this.revisionListForumPost(forum.id, thread.id, post.id)
 
 									for (const revision of revisionList) {
+										if (existingRevisions.includes(revision.id) && findPostRevision(localPost.revisions, revision.id)) {
+											// this.log(`Reusing existing post ${post.id} revision ${revision.id}`)
+											continue
+										}
+
 										revWorker.push((async () => {
 											this.log(`Fetching revision ${revision.id} of post ${post.id}`)
 											const revContent = await this.fetchPostRevision(revision.id)
 											await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+											fetchOnce = true
+
+											const find = findPostRevision(localPost.revisions, revision.id)
+
+											if (find != null) {
+												const index = localPost.revisions.indexOf(find)
+												localPost.revisions.splice(index, 1)
+											}
 
 											localPost.revisions.push({
 												title: revContent.title,
@@ -2050,7 +2091,14 @@ export class WikiDot {
 										})())
 									}
 
-									await Promise.all(revWorker)
+									if (revWorker.length != 0 || !existingRevisions.includes('latest')) {
+										await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
+										fetchOnce = true
+									}
+
+									if (revWorker.length != 0) {
+										await Promise.all(revWorker)
+									}
 								}
 
 								const workers = []
@@ -2106,7 +2154,12 @@ export class WikiDot {
 								await task()
 								break
 							} catch(err) {
-								this.error(`Encountered ${err}, sleeping for 5 seconds`)
+								if (err instanceof Error) {
+									this.error(`Encountered ${err.message}\n${err.stack}, sleeping for 5 seconds`)
+								} else {
+									this.error(`Encountered ${err}, sleeping for 5 seconds`)
+								}
+
 								await sleep(5_000)
 							}
 						}
@@ -2373,6 +2426,32 @@ export class WikiDot {
 		await promises.writeFile(`${this.workingDirectory}/forum/${category}/${thread}/${post}/${revision}.html`, value)
 	}
 
+	private async _postRevisionListFiles(category: number, thread: number, post: number) {
+		try {
+			return await promises.readdir(`${this.workingDirectory}/forum/${category}/${thread}/${post}/`)
+		} catch(err) {
+			return []
+		}
+	}
+
+	private async _postRevisionList7z(category: number, thread: number, post: number) {
+		try {
+			const list = await listZipFiles(`${this.workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
+			const build = []
+			const predicate = `${post}/`
+
+			for (const piece of list) {
+				if (piece.file != undefined && piece.file.startsWith(predicate)) { // ???
+					build.push(piece.file.substring(predicate.length))
+				}
+			}
+
+			return build
+		} catch(err) {
+			return []
+		}
+	}
+
 	private async _revisionList7z(page: string) {
 		try {
 			const list = await listZipFiles(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
@@ -2407,6 +2486,30 @@ export class WikiDot {
 					if (piece.status == 'fulfilled') {
 						for (const name of piece.value) {
 							list.push(parseInt(name.substring(0, name.length - 4)))
+						}
+					}
+				}
+
+				resolve(list)
+			})
+		})
+	}
+
+	public revisionListForumPost(category: number, thread: number, post: number): Promise<(string | number)[]> {
+		return new Promise((resolve, reject) => {
+			Promise.allSettled([this._postRevisionList7z(category, thread, post), this._postRevisionListFiles(category, thread, post)]).then(data => {
+				const list = []
+
+				for (const piece of data) {
+					if (piece.status == 'fulfilled') {
+						for (const name of piece.value) {
+							const rname = name.substring(0, name.length - 5)
+
+							if (rname != 'latest') {
+								list.push(parseInt(rname))
+							} else {
+								list.push(rname)
+							}
 						}
 					}
 				}
