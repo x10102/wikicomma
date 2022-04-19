@@ -2329,7 +2329,13 @@ export class WikiDot {
 							delete this.pendingRevisions.data[rev.global_revision]
 							this.pendingRevisions.markDirty()
 						} catch(err) {
-							this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
+							if (pageMeta.name.startsWith('nav:') || pageMeta.name.startsWith('tech:')) {
+								this.error(`Encountered ${err}, giving up on ${rev.global_revision} of ${pageMeta.name}`)
+								delete this.pendingRevisions.data[rev.global_revision]
+								this.pendingRevisions.markDirty()
+							} else {
+								this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
+							}
 						}
 					})
 				}
