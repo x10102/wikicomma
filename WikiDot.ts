@@ -1898,11 +1898,7 @@ export class WikiDot {
 
 						const lastRevision = findMostRevision(newMeta.revisions)
 						const changes = lastRevision == null ? await this.fetchPageChangeListAllForce(pageMeta.page_id) : await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, lastRevision)
-
-						for (const localChange of changes) {
-							newMeta.revisions.push(localChange)
-						}
-
+						newMeta.revisions.unshift(...changes)
 						await this.writePageMetadata(pageName, newMeta)
 						metadata = newMeta
 					}
