@@ -1765,6 +1765,31 @@ export class WikiDot {
 			this.log(`No previous sitemap was found, doing full scan`)
 		} else {
 			this.log(`Previous sitemap contains ${oldMap.size} pages`)
+			this.log(`Searching for deleted pages...`)
+
+			for (const name of oldMap.keys()) {
+				let hit = false
+
+				for (const [pageName, _] of sitemapPages) {
+					if (name == pageName) {
+						hit = true
+						break
+					}
+				}
+
+				if (!hit) {
+					this.log(`Page ${name} was removed`)
+
+					const metadata = await this.loadPageMetadata(name)
+
+					await this.markPageRemoved(name)
+
+					if (metadata != null) {
+						delete this.pageIdMap.data[metadata.page_id]
+						this.pageIdMap.markDirty()
+					}
+				}
+			}
 		}
 
 		const tasks: any[] = []
@@ -1819,7 +1844,7 @@ export class WikiDot {
 
 							if (metadata != null) {
 								this.log(`Page ${pageName} got replaced`)
-								await this.markPageReplaced(pageName)
+								await this.markPageRemoved(pageName)
 								delete this.pageIdMap.data[metadata.page_id]
 								this.pageIdMap.markDirty()
 							}
@@ -2671,7 +2696,7 @@ export class WikiDot {
 		}
 	}
 
-	public async markPageReplaced(page: string) {
+	public async markPageRemoved(page: string) {
 		try {
 			// await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
 			await promises.unlink(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)
