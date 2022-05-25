@@ -252,23 +252,40 @@ export class CookieJar {
 	}
 }
 
+import { SocksProxyAgent } from 'socks-proxy-agent';
+
 export class HTTPClient {
 	public cookies = new CookieJar()
 
-	private httpsagent = new https.Agent({
-		keepAlive: true,
-		keepAliveMsecs: 10000,
-		maxSockets: this.connections
-	})
+	private httpsagent: https.Agent
+	private httpagent: http.Agent
 
-	private httpagent = new http.Agent({
-		keepAlive: true,
-		keepAliveMsecs: 10000,
-		maxSockets: this.connections
-	})
+	constructor(private connections = 8, private proxyAddress?: string, private proxyPort?: number) {
+		if (proxyAddress != undefined && proxyPort != undefined) {
+			const agent = new SocksProxyAgent({
+				hostname: proxyAddress,
+				port: proxyPort,
+			})
 
-	constructor(private connections = 8) {
+			agent.maxSockets = this.connections
+			agent.options.keepAlive = true
+			agent.options.keepAliveMsecs = 10000
 
+			this.httpagent = agent
+			this.httpsagent = agent
+		} else {
+			this.httpsagent = new https.Agent({
+				keepAlive: true,
+				keepAliveMsecs: 10000,
+				maxSockets: this.connections
+			})
+
+			this.httpagent = new http.Agent({
+				keepAlive: true,
+				keepAliveMsecs: 10000,
+				maxSockets: this.connections
+			})
+		}
 	}
 
 	private handleRequest(value: BakedRequest) {
@@ -287,6 +304,16 @@ export class HTTPClient {
 				'Accept-Encoding': 'br, gzip, deflate'
 			}
 		}
+
+		/*if (this.proxyAddress != undefined && this.proxyPort != undefined) {
+			params.hostname = this.proxyAddress
+			params.port = this.proxyPort
+			value.url.protocol = 'http'
+			value.https = false
+			params.path = value.url.href
+			params.agent = this.httpagent
+			params.headers!['Host'] = value.url.hostname
+		}*/
 
 		if (buildCookie != '') {
 			params.headers!['Cookie'] = buildCookie
