@@ -257,34 +257,32 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 export class HTTPClient {
 	public cookies = new CookieJar()
 
-	private httpsagent: https.Agent
-	private httpagent: http.Agent
+	private httpsagent: https.Agent = new https.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 10000,
+		maxSockets: this.connections
+	})
 
-	constructor(private connections = 8, private proxyAddress?: string, private proxyPort?: number) {
+	private httpagent: http.Agent = new http.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 10000,
+		maxSockets: this.connections
+	})
+
+	private socksagent?: http.Agent
+
+	constructor(private connections = 8, private proxyAddress?: string, private proxyPort?: number, private proxyPortSocks?: number) {
 		if (proxyAddress != undefined && proxyPort != undefined) {
 			const agent = new SocksProxyAgent({
 				hostname: proxyAddress,
-				port: proxyPort,
+				port: proxyPortSocks,
 			})
 
 			agent.maxSockets = this.connections
 			agent.options.keepAlive = true
 			agent.options.keepAliveMsecs = 10000
 
-			this.httpagent = agent
-			this.httpsagent = agent
-		} else {
-			this.httpsagent = new https.Agent({
-				keepAlive: true,
-				keepAliveMsecs: 10000,
-				maxSockets: this.connections
-			})
-
-			this.httpagent = new http.Agent({
-				keepAlive: true,
-				keepAliveMsecs: 10000,
-				maxSockets: this.connections
-			})
+			this.socksagent = agent
 		}
 	}
 
@@ -305,15 +303,17 @@ export class HTTPClient {
 			}
 		}
 
-		/*if (this.proxyAddress != undefined && this.proxyPort != undefined) {
-			params.hostname = this.proxyAddress
-			params.port = this.proxyPort
-			value.url.protocol = 'http'
-			value.https = false
-			params.path = value.url.href
-			params.agent = this.httpagent
-			params.headers!['Host'] = value.url.hostname
-		}*/
+		if (this.proxyAddress != undefined && this.proxyPort != undefined) {
+			if (!value.https) {
+				params.hostname = this.proxyAddress
+				params.port = this.proxyPort
+				params.path = value.url.href
+				params.agent = this.httpagent
+				params.headers!['Host'] = value.url.hostname
+			} else {
+				params.agent = this.socksagent!
+			}
+		}
 
 		if (buildCookie != '') {
 			params.headers!['Cookie'] = buildCookie
