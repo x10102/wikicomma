@@ -78,6 +78,7 @@ interface PageMeta {
 	votings?: [User, boolean][]
 	sitemap_update?: number
 	files: FileMeta[]
+	parent?: string
 }
 
 interface GenericPageData {
@@ -86,6 +87,7 @@ interface GenericPageData {
 	rating?: number
 	forum_thread?: number
 	tags?: string[]
+	parent?: string
 }
 
 interface FileMeta {
@@ -975,6 +977,7 @@ export class WikiDot {
 			meta.page_name = pageName.trim()
 		}
 
+		meta.parent = html.querySelector('div#main-content div#breadcrumbs')?.querySelectorAll('a').pop()?.attributes.href?.substring(1)
 		return meta
 	}
 
@@ -1815,7 +1818,7 @@ export class WikiDot {
 					metadata.sitemap_update != pageUpdate.getTime() ||
 					metadata.page_id == undefined ||
 					metadata.version == undefined ||
-					metadata.version < 9
+					metadata.version < 11
 				) {
 					//this.log(`Need to renew ${pageName} (updated ${pageUpdate == null ? 'always invalid' : pageUpdate} vs ${metadata == null || metadata.sitemap_update == undefined ? 'never' : new Date(metadata.sitemap_update)})`)
 					this.log(`Need to renew ${pageName}`)
@@ -1836,10 +1839,11 @@ export class WikiDot {
 						if (metadata == null || metadata.page_id != -1 && metadata.page_id != pageMeta.page_id) {
 							newMeta = {
 								name: pageName,
-								version: 9,
+								version: 11,
 								revisions: [],
 								files: [],
 								page_id: pageMeta.page_id,
+								parent: pageMeta.parent,
 							}
 
 							if (metadata != null) {
@@ -1851,11 +1855,12 @@ export class WikiDot {
 						} else {
 							newMeta = {
 								name: pageName,
-								version: 9,
+								version: 11,
 								revisions: metadata.revisions,
 								files: metadata.files != undefined ? metadata.files : [],
 								page_id: metadata.page_id,
 								votings: metadata.votings,
+								parent: pageMeta.parent,
 							}
 						}
 
