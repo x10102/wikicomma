@@ -1391,17 +1391,26 @@ export class WikiDot {
 	private static localFileMatch = /\/local--files\/(.+)/i
 
 	private static splitFilePath(path: string): [string[], string, string] {
-		const split = path.split('/')
+		const split2 = path.split('/')
+		const split: string[] = []
 
-		for (const key in split) {
-			split[key] = reencodeComponent(split[key])
+		for (const key in split2) {
+			if (key == '.' || key == '..') {
+				continue
+			}
+
+			split[key] = reencodeComponent(split2[key])
 		}
 
 		if (split.length == 1) {
 			split.unshift('~')
 		}
 
-		const last = split.splice(split.length - 1)[0]
+		let last = split.splice(split.length - 1)[0]
+
+		if (last == '.' || last == '..') {
+			last = 'why_did_you_name_me_this_way'
+		}
 
 		return [split, last, `${split.join('/')}/${last}`]
 	}
@@ -1553,7 +1562,7 @@ export class WikiDot {
 
 		return {
 			file_id: file_id,
-			name: name.innerText.trim(),
+			name: name.innerText.trim().replace(/\//g, '%2F'),
 			url: fullURL.querySelector('a')?.attrs['href']!,
 			size: size.innerText.trim(),
 			size_bytes: parseInt(size.innerText.match(WikiDot.fileSizeMatcher)![1]),
