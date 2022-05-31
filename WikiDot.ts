@@ -1399,7 +1399,7 @@ export class WikiDot {
 				continue
 			}
 
-			split[key] = reencodeComponent(split2[key])
+			split.push(reencodeComponent(split2[key]))
 		}
 
 		if (split.length == 0) {
