@@ -115,6 +115,7 @@ const reencoding_table = [
 	[/</g, encodeURIComponent('<')],
 	[/>/g, encodeURIComponent('>')],
 	[/\|/g, encodeURIComponent('|')],
+	[/\//g, '%2F'],
 ]
 
 function reencodeComponent(str: string) {
@@ -1390,48 +1391,47 @@ export class WikiDot {
 	private downloadingFiles = new Map<string, boolean>()
 	private static localFileMatch = /\/local--files\/(.+)/i
 
-	private static splitFilePath(path: string): [string[], string, string] {
-		const split2 = path.split('/')
-		const split: string[] = []
+	private static splitFilePath(path: string): [string, string, string] {
+		const firstIndex = path.indexOf('/')
+		let pageName: string
+		let fileName: string
 
-		for (const key in split2) {
-			if (split2[key] == '.' || split2[key] == '..') {
-				continue
-			}
-
-			split.push(reencodeComponent(split2[key]))
+		if (firstIndex == -1) {
+			// what.
+			pageName = '~'
+			fileName = reencodeComponent(path)
+		} else {
+			pageName = path.substring(0, firstIndex)
+			pageName = pageName != '' ? reencodeComponent(pageName) : '~'
+			fileName = reencodeComponent(path.substring(firstIndex + 1))
 		}
 
-		if (split.length == 0) {
-			split.push('~', '~')
-		} else if (split.length == 1) {
-			split.unshift('~')
+		if (fileName == '.' || fileName == '..') {
+			fileName = 'why_did_you_name_me_this_way'
 		}
 
-		let last = split.splice(split.length - 1)[0]
-
-		if (last == '.' || last == '..') {
-			last = 'why_did_you_name_me_this_way'
+		if (pageName == '.' || pageName == '..') {
+			pageName = 'why_did_you_name_me_this_way'
 		}
 
-		return [split, last, `${split.join('/')}/${last}`]
+		return [pageName, fileName, `${pageName}/${fileName}`]
 	}
 
-	private static splitFilePathRaw(url: string): [string, string[], string, string] | null {
+	private static splitFilePathRaw(url: string): [string, string, string] | null {
 		const match = url.match(this.localFileMatch)
 
 		if (match == null) {
 			return null
 		}
 
-		const [split, last, recombined] = this.splitFilePath(match[1])
-		return [match[1], split, last, recombined]
+		const [pageName, fileName, recombined] = this.splitFilePath(match[1])
+		return [pageName, fileName, recombined]
 	}
 
-	private writeToFileMap(fileMeta: FileMeta, split: string[], last: string) {
+	private writeToFileMap(fileMeta: FileMeta, pageName: string, fileName: string) {
 		this.fileMap.data[fileMeta.file_id] = {
 			url: fileMeta.url,
-			path: `${split.join('/')}/${last}`
+			path: `${pageName}/${fileName}`
 		}
 
 		this.fileMap.markDirty()
@@ -1448,11 +1448,11 @@ export class WikiDot {
 		return false
 	}
 
-	private async fetchFileInner(fileMeta: {url: string, file_id: number}, split: string[], recombined: string, config?: RequestConfig) {
+	private async fetchFileInner(fileMeta: {url: string, file_id: number}, pageName: string, recombined: string, config?: RequestConfig) {
 		this.log(`Fetching file ${fileMeta.url}`)
 
 		await this.client.get(fileMeta.url, config).then(async buffer => {
-			await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
+			await promises.mkdir(`${this.workingDirectory}/files/${pageName}`, {recursive: true})
 			await promises.writeFile(`${this.workingDirectory}/files/${recombined}`, buffer)
 			this.removePendingFiles(fileMeta.file_id)
 		}).catch(err => {
@@ -1469,21 +1469,21 @@ export class WikiDot {
 			const match = WikiDot.splitFilePathRaw(fileMeta.url)
 
 			if (match != null) {
-				const [matched, split, last, recombined] = match
+				const [pageName, fileName, recombined] = match
 				metadata.push(fileMeta)
 
-				if (this.downloadingFiles.has(matched)) {
+				if (this.downloadingFiles.has(recombined)) {
 					continue
 				}
 
-				this.downloadingFiles.set(matched, true)
-				this.writeToFileMap(fileMeta, split, last)
+				this.downloadingFiles.set(recombined, true)
+				this.writeToFileMap(fileMeta, pageName, fileName)
 
 				if (await this.fileExists(recombined)) {
 					continue
 				}
 
-				this.fetchFileInner(fileMeta, split, recombined, {
+				this.fetchFileInner(fileMeta, pageName, recombined, {
 					headers: {
 						'Referer': this.url
 					}
@@ -2268,13 +2268,13 @@ export class WikiDot {
 				const match = WikiDot.splitFilePathRaw(mapped.url)
 
 				if (match != null) {
-					const [matched, split, last, recombined] = match
+					const [pageName, fileName, recombined] = match
 
 					if (await this.fileExists(recombined)) {
 						continue
 					}
 
-					this.fetchFileInner({url: mapped.url, file_id: id}, split, recombined, {
+					this.fetchFileInner({url: mapped.url, file_id: id}, pageName, recombined, {
 						headers: {
 							'Cache-Control': 'no-cache',
 							'Referer': this.url,
