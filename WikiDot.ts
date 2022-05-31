@@ -1395,7 +1395,7 @@ export class WikiDot {
 		const split: string[] = []
 
 		for (const key in split2) {
-			if (key == '.' || key == '..') {
+			if (split2[key] == '.' || split2[key] == '..') {
 				continue
 			}
 
