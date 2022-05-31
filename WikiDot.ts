@@ -1402,7 +1402,9 @@ export class WikiDot {
 			split[key] = reencodeComponent(split2[key])
 		}
 
-		if (split.length == 1) {
+		if (split.length == 0) {
+			split.push('~', '~')
+		} else if (split.length == 1) {
 			split.unshift('~')
 		}
 
