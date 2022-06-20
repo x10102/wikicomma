@@ -79,6 +79,7 @@ interface PageMeta {
 	sitemap_update?: number
 	files: FileMeta[]
 	parent?: string
+	is_locked?: boolean
 }
 
 interface GenericPageData {
@@ -674,6 +675,10 @@ export class WikiDot {
 		return json
 	}
 
+	private async fetchJsonForce(options: any, custom = false, headers?: OutgoingHttpHeaders) {
+		return JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
+	}
+
 	// low-level api
 	public async fetchChanges(page = 1, perPage = WikiDot.defaultPagenation) {
 		const listing: RecentChange[] = []
@@ -1043,6 +1048,16 @@ export class WikiDot {
 		}
 
 		return listing
+	}
+
+	public async fetchIsPageLocked(page_id: number) {
+		const json = await this.fetchJsonForce({
+			"page_id": page_id,
+			"moduleName": "edit/PageEditModule",
+		})
+
+		const html = parse(json.message)
+		return html.querySelector('a') == null
 	}
 
 	public async fetchRevision(revision_id: number) {
@@ -1659,6 +1674,8 @@ export class WikiDot {
 		return list2
 	}
 
+	private static META_VERSION = 15
+
 	public async workLoop(lock: Lock) {
 		await this.initialize()
 
@@ -1829,7 +1846,7 @@ export class WikiDot {
 					metadata.sitemap_update != pageUpdate.getTime() ||
 					metadata.page_id == undefined ||
 					metadata.version == undefined ||
-					metadata.version < 11
+					metadata.version < WikiDot.META_VERSION
 				) {
 					//this.log(`Need to renew ${pageName} (updated ${pageUpdate == null ? 'always invalid' : pageUpdate} vs ${metadata == null || metadata.sitemap_update == undefined ? 'never' : new Date(metadata.sitemap_update)})`)
 					this.log(`Need to renew ${pageName}`)
@@ -1850,7 +1867,7 @@ export class WikiDot {
 						if (metadata == null || metadata.page_id != -1 && metadata.page_id != pageMeta.page_id) {
 							newMeta = {
 								name: pageName,
-								version: 11,
+								version: WikiDot.META_VERSION,
 								revisions: [],
 								files: [],
 								page_id: pageMeta.page_id,
@@ -1866,7 +1883,7 @@ export class WikiDot {
 						} else {
 							newMeta = {
 								name: pageName,
-								version: 11,
+								version: WikiDot.META_VERSION,
 								revisions: metadata.revisions,
 								files: metadata.files != undefined ? metadata.files : [],
 								page_id: metadata.page_id,
@@ -1904,6 +1921,15 @@ export class WikiDot {
 								break
 							} catch(err) {
 								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
+							}
+						}
+
+						for (let i0 = 0; i0 < 3; i0++) {
+							try {
+								newMeta.is_locked = await this.fetchIsPageLocked(pageMeta.page_id)
+								break
+							} catch(err) {
+								this.error(`Encoutnered error fetching ${pageName} "is locked" status: ${err}`)
 							}
 						}
 
