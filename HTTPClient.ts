@@ -271,10 +271,16 @@ export class HTTPClient {
 
 	private socksagent?: http.Agent
 
-	constructor(private connections = 8, private proxyAddress?: string, private proxyPort?: number, private proxyPortSocks?: number) {
-		if (proxyAddress != undefined && proxyPort != undefined) {
+	constructor(
+		private connections = 8,
+		private proxyAddress?: string,
+		private proxyPort?: number,
+		proxySocksAddress?: string,
+		proxyPortSocks?: number
+	) {
+		if (proxySocksAddress != undefined && proxyPortSocks != undefined) {
 			const agent = new SocksProxyAgent({
-				hostname: proxyAddress,
+				hostname: proxySocksAddress,
 				port: proxyPortSocks,
 			})
 
@@ -303,16 +309,14 @@ export class HTTPClient {
 			}
 		}
 
-		if (this.proxyAddress != undefined && this.proxyPort != undefined) {
-			if (!value.https) {
-				params.hostname = this.proxyAddress
-				params.port = this.proxyPort
-				params.path = value.url.href
-				params.agent = this.httpagent
-				params.headers!['Host'] = value.url.hostname
-			} else {
-				params.agent = this.socksagent!
-			}
+		if (!value.https && this.proxyAddress != undefined && this.proxyPort != undefined) {
+			params.hostname = this.proxyAddress
+			params.port = this.proxyPort
+			params.path = value.url.href
+			params.agent = this.httpagent
+			params.headers!['Host'] = value.url.hostname
+		} else if (value.https && this.socksagent != undefined) {
+			params.agent = this.socksagent
 		}
 
 		if (buildCookie != '') {
