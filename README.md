@@ -13,6 +13,7 @@ A WikiDot farm wiki archiving tool
 This piece of software allows you to do incremental backups of next data from your wikidot wiki:
 
 - Page metadata
+	- Global ID
 	- Name
 	- Revision list
 	- Votes and voters
@@ -21,13 +22,13 @@ This piece of software allows you to do incremental backups of next data from yo
 	- Children files (IDs)
 	- Is page locked
 - File metadata
-	- ID
+	- Global ID
 	- Name
 	- Original URL
 	- Size (as-is)
 	- Size in bytes (parsed)
 	- MIME type reported as-is
-	- Author
+	- Author (as numeric ID if user was deleted)
 - Page revisions
 	- Global ID
 	- Per-page ID (counter)
