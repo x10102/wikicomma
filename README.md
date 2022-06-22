@@ -105,3 +105,17 @@ Example config:
 - `wikis[].url`: root path of wiki
 - `http_proxy`: http proxy for http requests, optional
 - `socks_proxy`: socks proxy for https requests, optional
+
+# Example usage
+
+Install typescript globally if not installed:
+
+`npm install -g typescript @types/node`
+
+Install dependencies, compile and run the tool:
+
+```
+npm install
+tsc
+node index
+```
