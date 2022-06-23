@@ -9,6 +9,7 @@ export function workerDelay() {
 
 export function setDelayMs(ms?: number) {
 	delayMs = ms || 0;
+	console.log(`[config]: Delay between jobs is ${delayMs}ms`);
 }
 
 export function buildWorker(tasks: any[]) {
