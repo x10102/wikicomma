@@ -24,6 +24,7 @@
 import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
 import { HTTPClient } from './HTTPClient'
+import { buildWorker, runWorkers, setDelayMs } from './worker'
 
 interface DaemonConfig {
 	base_directory: string
@@ -39,6 +40,7 @@ interface DaemonConfig {
 
 	try {
 		config = JSON.parse(await promises.readFile('./config.json', {encoding: 'utf-8'}))
+		setDelayMs(config.delay_ms)
 	} catch(err) {
 		process.stderr.write('config.json is missing or invalid from working directory.')
 		process.exit(1)
@@ -60,7 +62,6 @@ interface DaemonConfig {
 					`${config.base_directory}/${name}`,
 					new HTTPClient(
 						8,
-						config.delay_ms || 0,
 						config.http_proxy?.address,
 						config.http_proxy?.port,
 						config.socks_proxy?.address,
