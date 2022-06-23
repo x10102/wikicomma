@@ -1,15 +1,24 @@
 import { promisify } from 'util'
 
 let delayMs: number = -1;
+let maximumJobCount: number = -1;
 const sleep = promisify(setTimeout)
 
-export function workerDelay() {
-	return sleep(delayMs)
+export async function workerDelay() {
+	console.log('!sleep')
+	await sleep(delayMs)
 }
 
-export function setDelayMs(ms?: number) {
+export function setWorkerConfig(ms?: number, jobs?: number) {
 	delayMs = ms || 0;
 	console.log(`[config]: Delay between jobs is ${delayMs}ms`);
+
+	maximumJobCount = jobs || -1;
+	if (jobs === undefined) {
+		console.log('[config]: No maximum job limit');
+	} else {
+		console.log(`[config]: Maximum job limit is ${jobs}`);
+	}
 }
 
 export function buildWorker(tasks: any[]) {
@@ -22,6 +31,12 @@ export function buildWorker(tasks: any[]) {
 }
 
 export async function runWorkers(worker: any, count: number) {
+	// Set job count
+	if (maximumJobCount !== -1) {
+		count = Math.min(count, maximumJobCount)
+	}
+
+	// Produce and run jobs
 	const jobs = []
 
 	for (let i = 0; i < count; i++) {

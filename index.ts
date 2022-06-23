@@ -24,13 +24,14 @@
 import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
 import { HTTPClient } from './HTTPClient'
-import { buildWorker, runWorkers, setDelayMs } from './worker'
+import { buildWorker, runWorkers, setWorkerConfig } from './worker'
 
 interface DaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
 
 	delay_ms?: number
+	maximum_jobs?: number
 	http_proxy?: {address: string, port: number}
 	socks_proxy?: {address: string, port: number}
 }
@@ -40,7 +41,7 @@ interface DaemonConfig {
 
 	try {
 		config = JSON.parse(await promises.readFile('./config.json', {encoding: 'utf-8'}))
-		setDelayMs(config.delay_ms)
+		setWorkerConfig(config.delay_ms, config.maximum_jobs)
 	} catch(err) {
 		process.stderr.write('config.json is missing or invalid from working directory.')
 		process.exit(1)
