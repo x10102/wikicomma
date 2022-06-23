@@ -89,6 +89,8 @@ Example config:
 			"url": "https://scp-wiki.wikidot.com"
 		}
 	],
+	"delay_ms": 250,
+	"maximum_jobs": null,
 	"http_proxy": {
 		"address": "192.168.50.1",
 		"port": 4055
@@ -103,6 +105,8 @@ Example config:
 - `base_directory`: where to put all the files
 - `wikis[].name`: name of subdirectory inside `base_directory` to put files for this instance onto
 - `wikis[].url`: root path of wiki
+- `delay_ms`: milliseconds to wait in between jobs, optional
+- `maximum_jobs`: the maximum number of jobs to run simultaneously, optional
 - `http_proxy`: http proxy for http requests, optional
 - `socks_proxy`: socks proxy for https requests, optional
 
