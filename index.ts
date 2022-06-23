@@ -24,7 +24,7 @@
 import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
 import { HTTPClient } from './HTTPClient'
-import { buildWorker, runWorkers, setWorkerConfig } from './worker'
+import { blockingQueue, parallel, PromiseQueue } from './worker'
 
 interface DaemonConfig {
 	base_directory: string
@@ -41,7 +41,6 @@ interface DaemonConfig {
 
 	try {
 		config = JSON.parse(await promises.readFile('./config.json', {encoding: 'utf-8'}))
-		setWorkerConfig(config.delay_ms, config.maximum_jobs)
 	} catch(err) {
 		process.stderr.write('config.json is missing or invalid from working directory.')
 		process.exit(1)
@@ -68,7 +67,9 @@ interface DaemonConfig {
 						config.socks_proxy?.address,
 						config.socks_proxy?.port,
 					),
+					new PromiseQueue(config.delay_ms, config.maximum_jobs)
 				)
+
 				await wiki.fetchToken()
 				await wiki.workLoop(lock)
 			} catch(err) {
@@ -78,6 +79,6 @@ interface DaemonConfig {
 		})
 	}
 
-	const worker = buildWorker(tasks)
-	await runWorkers(worker, 3)
+	const worker = blockingQueue(tasks)
+	await parallel(worker, 3)
 })()

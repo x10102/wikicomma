@@ -1,46 +1,82 @@
+
 import { promisify } from 'util'
 
-let delayMs: number = -1;
-let maximumJobCount: number = -1;
 const sleep = promisify(setTimeout)
 
-export async function workerDelay() {
-	await sleep(delayMs)
-}
+export class PromiseQueue {
+	constructor(private ms: number = 0, private jobs: number | null = null) {
+		this.setWorkerConfig(ms, jobs)
+	}
 
-export function setWorkerConfig(ms?: number, jobs?: number) {
-	delayMs = ms || 0;
-	console.log(`[config]: Delay between jobs is ${delayMs}ms`);
+	setWorkerConfig(ms: number = 0, jobs: number | null = null) {
+		if (ms < 0) {
+			throw RangeError(`Invalid amount of milliseconds to wait: ${ms}`)
+		}
 
-	maximumJobCount = jobs || -1;
-	if (jobs) {
-		console.log(`[config]: Maximum job limit is ${jobs}`);
-	} else {
-		console.log('[config]: No maximum job limit');
+		if (jobs != null && jobs <= 0) {
+			throw RangeError(`Invalida amount of jobs: ${jobs}`)
+		}
+
+		this.ms = ms
+		this.jobs = jobs
+
+		if (jobs) {
+			console.log(`[config]: Maximum job limit is ${jobs}`);
+		} else {
+			console.log('[config]: No maximum job limit');
+		}
+	}
+
+	async run <T>(worker: () => Promise<T>, desiredThreadCount: number) {
+		if (this.jobs != null) {
+			desiredThreadCount = Math.min(this.jobs, desiredThreadCount)
+		}
+
+		// Produce and run jobs
+		const jobs = []
+
+		for (let i = 0; i < desiredThreadCount; i++) {
+			jobs.push(worker())
+		}
+
+		return await Promise.all(jobs)
+	}
+
+	async workerDelay() {
+		await sleep(this.ms)
+	}
+
+	blockingQueue(tasks: (() => Promise<any>)[]) {
+		return async () => {
+			while (tasks.length != 0) {
+				await tasks.pop()!()
+				await this.workerDelay()
+			}
+		}
 	}
 }
 
-export function buildWorker(tasks: any[]) {
+/**
+ * Creates blocking queue (executes tasks one by one)
+ */
+export function blockingQueue(tasks: (() => Promise<any>)[]) {
 	return async function() {
 		while (tasks.length != 0) {
-			await tasks.pop()()
-			await workerDelay()
+			await tasks.pop()!()
 		}
-	};
+	}
 }
 
-export async function runWorkers(worker: any, count: number) {
-	// Set job count
-	if (maximumJobCount !== -1) {
-		count = Math.min(count, maximumJobCount)
-	}
-
+/**
+ * Executes worker in parallel, returns only when all workers finish their work
+ */
+export async function parallel<T>(worker: () => Promise<T>, desiredThreadCount: number) {
 	// Produce and run jobs
 	const jobs = []
 
-	for (let i = 0; i < count; i++) {
+	for (let i = 0; i < desiredThreadCount; i++) {
 		jobs.push(worker())
 	}
 
-	await Promise.all(jobs)
+	return await Promise.all(jobs)
 }

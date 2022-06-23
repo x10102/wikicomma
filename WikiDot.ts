@@ -30,7 +30,7 @@ import { unescape } from 'html-escaper'
 import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
-import { buildWorker, runWorkers, workerDelay } from './worker'
+import { blockingQueue, parallel, PromiseQueue } from "./worker"
 
 const sleep = promisify(setTimeout)
 
@@ -574,6 +574,7 @@ export class WikiDot {
 		private url: string = `https://${name}.wikidot.com`,
 		private workingDirectory: string = `./storage/${name}`,
 		public client: HTTPClient,
+		public queue: PromiseQueue,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
@@ -1716,8 +1717,8 @@ export class WikiDot {
 					}
 				}
 
-				const worker = buildWorker(tasks);
-				await runWorkers(worker, 3);
+				const worker = blockingQueue(tasks)
+				await parallel(worker, 4)
 			}
 		}
 
@@ -1965,7 +1966,7 @@ export class WikiDot {
 								this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageName}`)
 								const body = await this.fetchRevision(rev.global_revision)
 								await this.writeRevision(pageName, rev.revision, body)
-								await workerDelay()
+								await this.queue.workerDelay()
 
 								if (rev.global_revision in this.pendingRevisions.data) {
 									delete this.pendingRevisions.data[rev.global_revision]
@@ -1982,7 +1983,7 @@ export class WikiDot {
 					}
 				}
 
-				await runWorkers(worker, 8)
+				await this.queue.run(worker, 8)
 
 				this.removePendingPages(pageName)
 				await this.writePageMetadata(pageName, metadata)
@@ -1993,8 +1994,8 @@ export class WikiDot {
 			})
 		}
 
-		const worker = buildWorker(tasks)
-		await runWorkers(worker, 8)
+		const worker = this.queue.blockingQueue(tasks)
+		await this.queue.run(worker, 8)
 
 		await this.writeSiteMap(sitemapPages)
 
@@ -2194,7 +2195,7 @@ export class WikiDot {
 					}
 				}
 
-				await runWorkers(doWork, 3)
+				await this.queue.run(doWork, 3)
 
 				if (threads.length == 0 || !updated && full_scan) {
 					await this.writeForumCategory({
@@ -2368,8 +2369,8 @@ export class WikiDot {
 					})
 				}
 
-				const worker = buildWorker(tasks)
-				await runWorkers(worker, 6)
+				const worker = blockingQueue(tasks)
+				await this.queue.run(worker, 6)
 
 				this.log(`Fetched all pending revisions!`)
 			}
