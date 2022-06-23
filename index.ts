@@ -24,11 +24,14 @@
 import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
 import { HTTPClient } from './HTTPClient'
+import { buildWorker, runWorkers, setWorkerConfig } from './worker'
 
 interface DaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
 
+	delay_ms?: number
+	maximum_jobs?: number
 	http_proxy?: {address: string, port: number}
 	socks_proxy?: {address: string, port: number}
 }
@@ -38,6 +41,7 @@ interface DaemonConfig {
 
 	try {
 		config = JSON.parse(await promises.readFile('./config.json', {encoding: 'utf-8'}))
+		setWorkerConfig(config.delay_ms, config.maximum_jobs)
 	} catch(err) {
 		process.stderr.write('config.json is missing or invalid from working directory.')
 		process.exit(1)
@@ -53,7 +57,18 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
-				const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`, new HTTPClient(8, config.http_proxy?.address, config.http_proxy?.port, config.socks_proxy?.address, config.socks_proxy?.port))
+				const wiki = new WikiDot(
+					name,
+					url,
+					`${config.base_directory}/${name}`,
+					new HTTPClient(
+						8,
+						config.http_proxy?.address,
+						config.http_proxy?.port,
+						config.socks_proxy?.address,
+						config.socks_proxy?.port,
+					),
+				)
 				await wiki.fetchToken()
 				await wiki.workLoop(lock)
 			} catch(err) {
@@ -63,15 +78,6 @@ interface DaemonConfig {
 		})
 	}
 
-	async function worker() {
-		while (tasks.length != 0) {
-			await tasks.splice(0, 1)[0]()
-		}
-	}
-
-	await Promise.allSettled([
-		worker(),
-		worker(),
-		worker(),
-	])
+	const worker = buildWorker(tasks)
+	await runWorkers(worker, 3)
 })()

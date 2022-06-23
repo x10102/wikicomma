@@ -30,6 +30,7 @@ import { unescape } from 'html-escaper'
 import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
+import { buildWorker, runWorkers, workerDelay } from './worker'
 
 const sleep = promisify(setTimeout)
 
@@ -572,7 +573,7 @@ export class WikiDot {
 		private name: string,
 		private url: string = `https://${name}.wikidot.com`,
 		private workingDirectory: string = `./storage/${name}`,
-		public client = new HTTPClient(8),
+		public client: HTTPClient,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
@@ -1715,17 +1716,8 @@ export class WikiDot {
 					}
 				}
 
-				const worker = async () => {
-					while (tasks.length != 0) {
-						await tasks.pop()()
-					}
-				}
-
-				await Promise.all([
-					worker(),
-					worker(),
-					worker(),
-				])
+				const worker = buildWorker(tasks);
+				await runWorkers(worker, 3);
 			}
 		}
 
@@ -1973,6 +1965,7 @@ export class WikiDot {
 								this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageName}`)
 								const body = await this.fetchRevision(rev.global_revision)
 								await this.writeRevision(pageName, rev.revision, body)
+								await workerDelay()
 
 								if (rev.global_revision in this.pendingRevisions.data) {
 									delete this.pendingRevisions.data[rev.global_revision]
@@ -1989,16 +1982,7 @@ export class WikiDot {
 					}
 				}
 
-				await Promise.allSettled([
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-				])
+				await runWorkers(worker, 8)
 
 				this.removePendingPages(pageName)
 				await this.writePageMetadata(pageName, metadata)
@@ -2009,26 +1993,8 @@ export class WikiDot {
 			})
 		}
 
-		const worker = async () => {
-			while (tasks.length != 0) {
-				try {
-					await tasks.pop()()
-				} catch(err) {
-					this.error(`Task failed: ${err}`)
-				}
-			}
-		}
-
-		await Promise.allSettled([
-			worker(),
-			worker(),
-			worker(),
-			worker(),
-			worker(),
-			worker(),
-			worker(),
-			worker(),
-		])
+		const worker = buildWorker(tasks)
+		await runWorkers(worker, 8)
 
 		await this.writeSiteMap(sitemapPages)
 
@@ -2056,7 +2022,6 @@ export class WikiDot {
 						const localThread = await this.loadForumThread(forum.id, thread.id)
 
 						let shouldFetch = localThread == null || localThread.last != thread.last
-
 						if (!shouldFetch && localThread != null) {
 							let count = 0
 
@@ -2229,7 +2194,7 @@ export class WikiDot {
 					}
 				}
 
-				await Promise.all([doWork(), doWork(), doWork()])
+				await runWorkers(doWork, 3)
 
 				if (threads.length == 0 || !updated && full_scan) {
 					await this.writeForumCategory({
@@ -2403,20 +2368,8 @@ export class WikiDot {
 					})
 				}
 
-				const worker = async () => {
-					while (tasks.length != 0) {
-						await tasks.pop()()
-					}
-				}
-
-				await Promise.all([
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-					worker(),
-				])
+				const worker = buildWorker(tasks)
+				await runWorkers(worker, 6)
 
 				this.log(`Fetched all pending revisions!`)
 			}
