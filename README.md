@@ -108,14 +108,12 @@ Example config:
 
 # Example usage
 
-Install typescript globally if not installed:
-
-`npm install -g typescript @types/node`
-
 Install dependencies, compile and run the tool:
 
 ```
 npm install
-tsc
-node index
+npm run build
+npm run start
 ```
+
+If typescript is installed globally (`npm install -g typescript @types/node`) you can instead run `tsc` instead of `npm run build`.
