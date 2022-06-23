@@ -5,7 +5,6 @@ let maximumJobCount: number = -1;
 const sleep = promisify(setTimeout)
 
 export async function workerDelay() {
-	console.log('!sleep')
 	await sleep(delayMs)
 }
 
