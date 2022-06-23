@@ -273,6 +273,7 @@ export class HTTPClient {
 
 	constructor(
 		private connections = 8,
+		private delayMillis: number,
 		private proxyAddress?: string,
 		private proxyPort?: number,
 		proxySocksAddress?: string,

@@ -572,7 +572,7 @@ export class WikiDot {
 		private name: string,
 		private url: string = `https://${name}.wikidot.com`,
 		private workingDirectory: string = `./storage/${name}`,
-		public client = new HTTPClient(8),
+		public client: HTTPClient,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)

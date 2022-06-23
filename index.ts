@@ -29,6 +29,7 @@ interface DaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
 
+	delay_ms?: number
 	http_proxy?: {address: string, port: number}
 	socks_proxy?: {address: string, port: number}
 }
@@ -53,7 +54,7 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
-				const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`, new HTTPClient(8, config.http_proxy?.address, config.http_proxy?.port, config.socks_proxy?.address, config.socks_proxy?.port))
+				const wiki = new WikiDot(name, url, `${config.base_directory}/${name}`, new HTTPClient(8, config.delay_ms || 0, config.http_proxy?.address, config.http_proxy?.port, config.socks_proxy?.address, config.socks_proxy?.port))
 				await wiki.fetchToken()
 				await wiki.workLoop(lock)
 			} catch(err) {
