@@ -77,15 +77,6 @@ interface DaemonConfig {
 		})
 	}
 
-	async function worker() {
-		while (tasks.length != 0) {
-			await tasks.splice(0, 1)[0]()
-		}
-	}
-
-	await Promise.allSettled([
-		worker(),
-		worker(),
-		worker(),
-	])
+	const worker = buildWorker(tasks)
+	await runWorkers(worker, 3)
 })()
