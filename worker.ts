@@ -13,10 +13,10 @@ export function setWorkerConfig(ms?: number, jobs?: number) {
 	console.log(`[config]: Delay between jobs is ${delayMs}ms`);
 
 	maximumJobCount = jobs || -1;
-	if (jobs === undefined) {
-		console.log('[config]: No maximum job limit');
-	} else {
+	if (jobs) {
 		console.log(`[config]: Maximum job limit is ${jobs}`);
+	} else {
+		console.log('[config]: No maximum job limit');
 	}
 }
 
