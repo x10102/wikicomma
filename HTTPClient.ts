@@ -283,7 +283,7 @@ export class HTTPClient {
 
 	constructor(
 		private connections = 8,
-		private rateLimitBucket: RatelimitBucket,
+		private ratelimitBucket: RatelimitBucket,
 		private proxyAddress?: string,
 		private proxyPort?: number,
 		proxySocksAddress?: string,
@@ -303,7 +303,9 @@ export class HTTPClient {
 		}
 	}
 
-	private handleRequest(value: BakedRequest) {
+	private async handleRequest(value: BakedRequest) {
+		await this.ratelimitBucket.wait()
+
 		const buildCookie = this.cookies.build(value.url)
 
 		const params: http.RequestOptions = {
