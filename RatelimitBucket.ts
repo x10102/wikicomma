@@ -46,7 +46,7 @@ export class RatelimitBucket {
 			if (this.take()) {
 				resolve()
 			} else {
-				setTimeout(_ => poll(resolve), 200)
+				setTimeout(_ => poll(resolve), 250)
 			}
 		};
 
