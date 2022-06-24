@@ -281,9 +281,10 @@ export class HTTPClient {
 
 	private socksagent?: http.Agent
 
+	public ratelimit?: RatelimitBucket
+
 	constructor(
 		private connections = 8,
-		private ratelimitBucket: RatelimitBucket,
 		private proxyAddress?: string,
 		private proxyPort?: number,
 		proxySocksAddress?: string,
@@ -304,7 +305,9 @@ export class HTTPClient {
 	}
 
 	private async handleRequest(value: BakedRequest) {
-		await this.ratelimitBucket.wait()
+		if (this.ratelimit != undefined) {
+			await this.ratelimit.wait()
+		}
 
 		const buildCookie = this.cookies.build(value.url)
 

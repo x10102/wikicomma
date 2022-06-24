@@ -58,24 +58,35 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
-				const rateLimitBucket = new RatelimitBucket(config.ratelimit)
-				const wiki = new WikiDot(
-					name,
-					url,
-					`${config.base_directory}/${name}`,
-					new HTTPClient(
-						8,
-						rateLimitBucket,
-						config.http_proxy?.address,
-						config.http_proxy?.port,
-						config.socks_proxy?.address,
-						config.socks_proxy?.port,
-					),
-					new PromiseQueue(config.delay_ms, config.maximum_jobs)
+				const client = new HTTPClient(
+					8,
+					config.http_proxy?.address,
+					config.http_proxy?.port,
+					config.socks_proxy?.address,
+					config.socks_proxy?.port,
 				)
 
-				await wiki.fetchToken()
-				await wiki.workLoop(lock)
+				if (config.ratelimit != undefined) {
+					client.ratelimit = new RatelimitBucket(config.ratelimit.bucket_size, config.ratelimit.refill_seconds)
+					client.ratelimit.starTimer()
+				}
+
+				try {
+					const wiki = new WikiDot(
+						name,
+						url,
+						`${config.base_directory}/${name}`,
+						client,
+						new PromiseQueue(config.delay_ms, config.maximum_jobs)
+					)
+
+					await wiki.fetchToken()
+					await wiki.workLoop(lock)
+				} finally {
+					if (client.ratelimit != undefined) {
+						client.ratelimit.stopTimer()
+					}
+				}
 			} catch(err) {
 				console.error(`Fetching wiki ${name} failed`)
 				console.error(err)

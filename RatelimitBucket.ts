@@ -1,37 +1,53 @@
 
 export class RatelimitBucket {
-	private enabled: boolean
-	private tokens: number
-	private capacity: number
+	private observers: (() => void)[] = []
+	private tokens = this.capacity
+	private timer?: NodeJS.Timer
 
 	constructor(
-		config?: { bucket_size: number, refill_seconds: number },
+		private capacity: number,
+		private refill_seconds: number
 	) {
-		if (!config) {
-			this.enabled = false
-			this.tokens = 0
-			this.capacity = 0
-			return
+		if (capacity <= 0) {
+			throw new RangeError(`Invalid capacity: ${capacity}`)
 		}
 
-		this.enabled = true
-		this.capacity = config.bucket_size
-		this.tokens = this.capacity
+		if (refill_seconds <= 0) {
+			throw new RangeError(`Invalid refill seconds: ${refill_seconds}`)
+		}
+	}
 
-		const fillDelayMs = 1000 * config.refill_seconds / config.bucket_size
-		setInterval(() => this.addToken(), fillDelayMs)
+	public starTimer() {
+		if (this.timer != undefined) {
+			throw Error(`Timer already started!`)
+		}
+
+		const fillDelayMs = 1000 * this.refill_seconds / this.capacity
+		this.timer = setInterval(() => this.addToken(), fillDelayMs)
+	}
+
+	public stopTimer() {
+		if (this.timer == undefined) {
+			throw Error(`No timer present!`)
+		}
+
+		clearInterval(this.timer)
 	}
 
 	private addToken() {
 		this.tokens = Math.min(this.tokens + 1, this.capacity)
+
+		if (this.tokens > 0) {
+			const observer = this.observers.splice(0, 1)
+
+			if (observer.length != 0 && this.allocate()) {
+				observer[0]()
+			}
+		}
 	}
 
 	/* Consume a ratelimit token, if present */
-	take(): boolean {
-		if (!this.enabled) {
-			return true
-		}
-
+	public allocate(): boolean {
 		if (this.tokens > 0) {
 			this.tokens--
 			return true
@@ -41,15 +57,14 @@ export class RatelimitBucket {
 	}
 
 	/* Wait until a token can be consumed */
-	async wait() {
-		const poll = (resolve: any) => {
-			if (this.take()) {
+	public wait(): Promise<void> {
+		return new Promise((resolve) => {
+			if (this.allocate()) {
 				resolve()
-			} else {
-				setTimeout(_ => poll(resolve), 250)
+				return
 			}
-		};
 
-		return new Promise(poll)
+			this.observers.push(resolve)
+		})
 	}
 }
