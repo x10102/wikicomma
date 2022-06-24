@@ -73,8 +73,10 @@ export class HTTPCookie implements HTTPCookieData {
 	public expires: Date | null = null
 	public secure: boolean = false
 
-	constructor(public name: string, public value: string) {
-
+	constructor(
+		public name: string,
+		public value: string
+	) {
 	}
 
 	public save(): HTTPCookieData {
@@ -99,8 +101,11 @@ export class HTTPCookie implements HTTPCookieData {
 }
 
 class HTTPError {
-	constructor(public response: number | undefined, public body: string | Buffer | null, public message: string | null) {
-
+	constructor(
+		public response: number | undefined,
+		public body: string | Buffer | null,
+		public message: string | null
+	) {
 	}
 
 	public toString() {
