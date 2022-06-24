@@ -89,6 +89,10 @@ Example config:
 			"url": "https://scp-wiki.wikidot.com"
 		}
 	],
+	"ratelimit": {
+		"bucket_size": 60,
+		"refill_seconds": 45,
+	},
 	"delay_ms": 250,
 	"maximum_jobs": null,
 	"http_proxy": {
@@ -105,6 +109,9 @@ Example config:
 - `base_directory`: where to put all the files
 - `wikis[].name`: name of subdirectory inside `base_directory` to put files for this instance onto
 - `wikis[].url`: root path of wiki
+- `ratelimit`: limiting the rate at which requests are made, optional
+- `ratelimit.bucket_size`: how many requests can be made per period
+- `ratelimit.refill_seconds`: how many seconds it takes for a ratelimit bucket to be entirely refilled
 - `delay_ms`: milliseconds to wait in between jobs, optional
 - `maximum_jobs`: the maximum number of jobs to run simultaneously, optional
 - `http_proxy`: http proxy for http requests, optional
