@@ -23,6 +23,7 @@
 
 import { WikiDot, Lock } from './WikiDot'
 import { promises } from 'fs'
+import { RatelimitBucket } from './RatelimitBucket'
 import { HTTPClient } from './HTTPClient'
 import { blockingQueue, parallel, PromiseQueue } from './worker'
 
@@ -30,6 +31,7 @@ interface DaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
 
+	ratelimit?: { bucket_size: number, refill_seconds: number }
 	delay_ms?: number
 	maximum_jobs?: number
 	http_proxy?: {address: string, port: number}
@@ -56,12 +58,14 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
+				const rateLimitBucket = new RatelimitBucket(config.ratelimit)
 				const wiki = new WikiDot(
 					name,
 					url,
 					`${config.base_directory}/${name}`,
 					new HTTPClient(
 						8,
+						rateLimitBucket,
 						config.http_proxy?.address,
 						config.http_proxy?.port,
 						config.socks_proxy?.address,

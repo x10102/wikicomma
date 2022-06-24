@@ -26,6 +26,7 @@ import https = require('https')
 import urlModule = require('url')
 import {unzip, brotliDecompress, inflate} from 'zlib'
 import {promisify} from 'util'
+import {RatelimitBucket} from './RatelimitBucket'
 
 const punzip = promisify(unzip)
 const pbrotliDecompress = promisify(brotliDecompress)
@@ -273,6 +274,7 @@ export class HTTPClient {
 
 	constructor(
 		private connections = 8,
+		private rateLimitBucket: RatelimitBucket,
 		private proxyAddress?: string,
 		private proxyPort?: number,
 		proxySocksAddress?: string,
