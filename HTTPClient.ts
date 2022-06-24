@@ -243,7 +243,11 @@ export class CookieJar {
 		cookieConstruct.secure = secure
 
 		for (const i in this.cookies) {
-			if (this.cookies[i].domain == cookieConstruct.domain && this.cookies[i].name == cookieConstruct.name && this.cookies[i].path == cookieConstruct.path) {
+			if (
+				this.cookies[i].domain == cookieConstruct.domain &&
+				this.cookies[i].name == cookieConstruct.name &&
+				this.cookies[i].path == cookieConstruct.path
+			) {
 				this.cookies.splice(parseInt(i), 1)
 			}
 		}
