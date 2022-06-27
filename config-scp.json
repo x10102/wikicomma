@@ -1,5 +1,5 @@
 {
-	"base_directory": "/media/wikicomma",
+	"base_directory": "/app/storage",
 	"wikis": [
 		{
 			"name": "scp-en",
