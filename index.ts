@@ -42,9 +42,12 @@ interface DaemonConfig {
 	let config: DaemonConfig
 
 	try {
-		config = JSON.parse(await promises.readFile('./config.json', {encoding: 'utf-8'}))
+		const configPath = process.env.WIKICOMMA_CONFIG || 'config.json'
+		const configData = await promises.readFile(configPath, {encoding: 'utf-8'})
+		config = JSON.parse(configData)
 	} catch(err) {
 		process.stderr.write('config.json is missing or invalid from working directory.')
+		process.stderr.write('Or set a different file using the WIKICOMMA_CONFIG environment variable.')
 		process.exit(1)
 	}
 
