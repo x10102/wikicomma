@@ -1,1 +1,1 @@
-scraper: npm run start
+scraper: npm start
