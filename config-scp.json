@@ -1,0 +1,121 @@
+{
+	"base_directory": "/media/wikicomma",
+	"wikis": [
+		{
+			"name": "scp-en",
+			"url": "https://scp-wiki.wikidot.com"
+		},
+		{
+			"name": "scp-ru",
+			"url": "http://scp-ru.wikidot.com/"
+		},
+		{
+			"name": "scp-ko",
+			"url": "http://scpko.wikidot.com/"
+		},
+		{
+			"name": "scp-cn",
+			"url": "http://scp-wiki-cn.wikidot.com/"
+		},
+		{
+			"name": "scp-fr",
+			"url": "http://fondationscp.wikidot.com/"
+		},
+		{
+			"name": "scp-pl",
+			"url": "http://scp-pl.wikidot.com/"
+		},
+		{
+			"name": "scp-es",
+			"url": "http://lafundacionscp.wikidot.com/"
+		},
+		{
+			"name": "scp-th",
+			"url": "http://scp-th.wikidot.com/"
+		},
+		{
+			"name": "scp-jp",
+			"url": "http://scp-jp.wikidot.com/"
+		},
+		{
+			"name": "scp-de",
+			"url": "http://scp-wiki-de.wikidot.com/"
+		},
+		{
+			"name": "scp-it",
+			"url": "http://fondazionescp.wikidot.com/"
+		},
+		{
+			"name": "scp-ua",
+			"url": "http://scp-ukrainian.wikidot.com/"
+		},
+		{
+			"name": "scp-pt-br",
+			"url": "http://scp-pt-br.wikidot.com/"
+		},
+		{
+			"name": "scp-cs",
+			"url": "http://scp-cs.wikidot.com/"
+		},
+		{
+			"name": "scp-zh-tr",
+			"url": "http://scp-zh-tr.wikidot.com/"
+		},
+		{
+			"name": "scp-vn",
+			"url": "http://scp-vn.wikidot.com/"
+		},
+		{
+			"name": "scp-el",
+			"url": "http://scp-el.wikidot.com/"
+		},
+		{
+			"name": "scp-id",
+			"url": "http://scp-idn.wikidot.com/"
+		},
+		{
+			"name": "scp-nd",
+			"url": "http://scp-nd.wikidot.com/"
+		},
+		{
+			"name": "scp-tr",
+			"url": "http://scpvakfi.wikidot.com/"
+		},
+		{
+			"name": "scp-int",
+			"url": "http://scp-int.wikidot.com/"
+		},
+		{
+			"name": "wl-en",
+			"url": "http://wanderers-library.wikidot.com/"
+		},
+		{
+			"name": "wl-cs",
+			"url": "http://wanderers-library-cs.wikidot.com/"
+		},
+		{
+			"name": "wl-jp",
+			"url": "http://wanderers-library-jp.wikidot.com/"
+		},
+		{
+			"name": "wl-ko",
+			"url": "http://wanderers-library-ko.wikidot.com/"
+		},
+		{
+			"name": "wl-pl",
+			"url": "http://wanderers-library-pl.wikidot.com/"
+		},
+		{
+			"name": "brucebase",
+			"url": "http://brucebase.wikidot.com"
+		}
+	],
+	"ratelimit": {
+		"bucket_size": 60,
+		"refill_seconds": 120
+	},
+	"delay_ms": 0,
+	"maximum_jobs": 2,
+	"http_proxy": null,
+	"socks_proxy": null
+}
