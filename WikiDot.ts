@@ -1904,7 +1904,7 @@ export class WikiDot {
 								newMeta.votings = await this.fetchPageVoters(pageMeta.page_id)
 								break
 							} catch(err) {
-								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
+								this.error(`Encountered error fetching ${pageName} voters: ${err}`)
 							}
 						}
 
@@ -1913,7 +1913,7 @@ export class WikiDot {
 								newMeta.files = await this.fetchFilesFor(pageMeta.page_id, newMeta.files)
 								break
 							} catch(err) {
-								this.error(`Encoutnered error fetching ${pageName} voters: ${err}`)
+								this.error(`Encountered error fetching ${pageName} voters: ${err}`)
 							}
 						}
 
@@ -1922,7 +1922,7 @@ export class WikiDot {
 								newMeta.is_locked = await this.fetchIsPageLocked(pageMeta.page_id)
 								break
 							} catch(err) {
-								this.error(`Encoutnered error fetching ${pageName} "is locked" status: ${err}`)
+								this.error(`Encountered error fetching ${pageName} "is locked" status: ${err}`)
 							}
 						}
 
