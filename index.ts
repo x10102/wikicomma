@@ -41,8 +41,10 @@ interface DaemonConfig {
 (async function() {
 	let config: DaemonConfig
 
+	const argv = process.argv[3]
+
 	try {
-		const configPath = process.env.WIKICOMMA_CONFIG || 'config.json'
+		const configPath = argv !== undefined ? argv : (process.env.WIKICOMMA_CONFIG !== undefined ? process.env.WIKICOMMA_CONFIG : 'config.json')
 		const configData = await promises.readFile(configPath, {encoding: 'utf-8'})
 		config = JSON.parse(configData)
 	} catch(err) {
