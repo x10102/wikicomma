@@ -2,7 +2,7 @@ FROM node:18-alpine
 
 # System dependencies
 RUN apk add --no-cache p7zip
-RUN adduser --system wikicomma
+RUN adduser --system --uid 32767 wikicomma
 
 # Copy source
 COPY ./ /app
