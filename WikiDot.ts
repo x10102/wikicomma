@@ -1950,7 +1950,7 @@ export class WikiDot {
 					}
 				}
 
-				const changes = revisionsToFetch.length != 0
+				let changes = false
 				flipArray(revisionsToFetch)
 
 				const worker = async () => {
@@ -1966,6 +1966,7 @@ export class WikiDot {
 								this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageName}`)
 								const body = await this.fetchRevision(rev.global_revision)
 								await this.writeRevision(pageName, rev.revision, body)
+								changes = true
 								await this.queue.workerDelay()
 
 								if (rev.global_revision in this.pendingRevisions.data) {
