@@ -2398,11 +2398,21 @@ export class WikiDot {
 		if (forums.length != 0) {
 			this.log(`Compressing forum threads`)
 
-			for (const category of await promises.readdir(`${this.workingDirectory}/forum/`)) {
-				if (!category.startsWith('.') && (await promises.stat(`${this.workingDirectory}/forum/${category}`)).isDirectory()) {
-					for (const thread of await promises.readdir(`${this.workingDirectory}/forum/${category}`)) {
-						if (!thread.startsWith('.') && !thread.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/forum/${category}/${thread}`)).isDirectory()) {
-							await this.compressForumThread(category, thread)
+			let isdir = false
+
+			try {
+				isdir = (await promises.stat(`${this.workingDirectory}/forum/`)).isDirectory()
+			} catch(err) {
+
+			}
+
+			if (isdir) {
+				for (const category of await promises.readdir(`${this.workingDirectory}/forum/`)) {
+					if (!category.startsWith('.') && (await promises.stat(`${this.workingDirectory}/forum/${category}`)).isDirectory()) {
+						for (const thread of await promises.readdir(`${this.workingDirectory}/forum/${category}`)) {
+							if (!thread.startsWith('.') && !thread.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/forum/${category}/${thread}`)).isDirectory()) {
+								await this.compressForumThread(category, thread)
+							}
 						}
 					}
 				}
