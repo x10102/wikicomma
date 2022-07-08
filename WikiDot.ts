@@ -272,6 +272,7 @@ class DiskMeta<T> {
 	private metaIsSyncing = false
 	private metaSyncCallbacks: any[] = []
 	private metaSyncRejects: any[] = []
+	private writeOnce = false
 
 	public markDirty() {
 		this.metaIsDirty = true
@@ -310,6 +311,13 @@ class DiskMeta<T> {
 			}
 
 			try {
+				if (!this.writeOnce) {
+					const split = this.path.split('/')
+					split.pop()
+					await promises.mkdir(split.join('/'), {recursive: true})
+					this.writeOnce = true
+				}
+
 				const json = JSON.stringify(this.data, null, 4)
 
 				await promises.writeFile(this.path, json)
