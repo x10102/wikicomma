@@ -192,7 +192,7 @@ export class WikidotUserList {
 		}
 	}
 
-	public async fetchOptional(id: number, username: string): Promise<User | null> {
+	public async initialize(skipid?: number) {
 		if (!this.fetchedOnce) {
 			await promises.mkdir(this.workFolder, {recursive: true})
 			this.fetchedOnce = true
@@ -201,7 +201,7 @@ export class WikidotUserList {
 				this.usersToFetch = JSON.parse(await promises.readFile(`${this.workFolder}/pending.json`, {encoding: 'utf-8'}))
 
 				for (const [a, b] of this.usersToFetch) {
-					if (a != id) {
+					if (a != skipid) {
 						this.fetchOptional(a, b)
 					}
 				}
@@ -209,6 +209,10 @@ export class WikidotUserList {
 				console.error(err)
 			}
 		}
+	}
+
+	public async fetchOptional(id: number, username: string): Promise<User | null> {
+		await this.initialize(id)
 
 		if (this.fetched.has(username)) {
 			return null
@@ -241,6 +245,13 @@ export class WikidotUserList {
 					}
 				}
 
+				const index = indexOf(this.usersToFetch, id)
+
+				if (index >= 0) {
+					this.usersToFetch.splice(index, 1)
+					this.wantsToWritePending()
+				}
+
 				return fetchExisting
 			}
 
@@ -259,6 +270,8 @@ export class WikidotUserList {
 				this.usersToFetch.push([id, username])
 				this.wantsToWritePending()
 			}
+
+			process.stdout.write(`Trying to fetch wikidot user ${username}<${id}>\n`)
 
 			const body = (await this.client.get(path, {headers: {
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
@@ -347,6 +360,8 @@ export class WikidotUserList {
 			}
 
 			await this.write(id, data)
+
+			process.stdout.write(`Fetched wikidot user ${username}<${id}>\n`)
 
 			for (const fn of waiting_room.resolve) {
 				try {

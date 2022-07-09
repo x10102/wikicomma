@@ -75,6 +75,8 @@ interface DaemonConfig {
 	const lock = new Lock()
 	const userList = new WikidotUserList(config.base_directory + '/_users', makeClient())
 
+	await userList.initialize()
+
 	for (let {name, url} of config.wikis) {
 		tasks.push(async function() {
 			try {
