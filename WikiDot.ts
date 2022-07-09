@@ -31,21 +31,22 @@ import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 import { blockingQueue, parallel, PromiseQueue } from "./worker"
+import { WikidotUserList } from "./WikidotUserList"
 
 const sleep = promisify(setTimeout)
 
-type User = number | string | null
+type UserID = number | null
 
 interface RecentChange {
 	name: string
 	revision?: number
-	author: User
+	author: UserID
 }
 
 interface PageRevision {
 	revision: number
 	global_revision: number
-	author: User
+	author: UserID
 	stamp?: number
 	flags?: string
 	commentary?: string
@@ -67,7 +68,7 @@ function findMostRevision(list: PageRevision[]) {
 	return max
 }
 
-interface PageMeta {
+export interface PageMeta {
 	name: string
 	page_id: number
 	rating?: number
@@ -76,14 +77,14 @@ interface PageMeta {
 	revisions: PageRevision[]
 	tags?: string[]
 	title?: string
-	votings?: [User, boolean][]
+	votings?: [UserID, boolean][]
 	sitemap_update?: number
 	files: FileMeta[]
 	parent?: string
 	is_locked?: boolean
 }
 
-interface GenericPageData {
+export interface GenericPageData {
 	page_id?: number
 	page_name?: string
 	rating?: number
@@ -92,7 +93,7 @@ interface GenericPageData {
 	parent?: string
 }
 
-interface FileMeta {
+export interface FileMeta {
 	file_id: number
 	name: string
 	url: string
@@ -100,7 +101,7 @@ interface FileMeta {
 	size_bytes: number
 	mime: string
 	content: string
-	author: User
+	author: UserID
 	stamp: number
 }
 
@@ -120,7 +121,7 @@ const reencoding_table = [
 	[/\//g, '%2F'],
 ]
 
-function reencodeComponent(str: string) {
+export function reencodeComponent(str: string) {
 	str = decodeURIComponent(str)
 
 	for (const [a, b] of reencoding_table) {
@@ -129,8 +130,6 @@ function reencodeComponent(str: string) {
 
 	return str
 }
-
-export {reencodeComponent}
 
 function pushToSet<T>(set: T[], value: T) {
 	if (!set.includes(value)) {
@@ -166,50 +165,50 @@ function flipArray<T>(input: T[]): T[] {
 	return input
 }
 
-interface ForumCategory {
+export interface ForumCategory {
 	title: string
 	description: string
 	id: number
 	last?: number
 	posts: number
 	threads: number
-	lastUser: User
+	lastUser: UserID
 }
 
-interface LocalForumCategory extends ForumCategory {
+export interface LocalForumCategory extends ForumCategory {
 	full_scan: boolean
 	last_page: number
 }
 
-interface ForumRevisionBody {
+export interface ForumRevisionBody {
 	title: string
 	content: string
 }
 
-interface HeadlessForumPost {
+export interface HeadlessForumPost {
 	id: number
-	poster: User
+	poster: UserID
 	stamp: number
 	lastEdit?: number
-	lastEditBy?: User
+	lastEditBy?: UserID
 }
 
-interface ForumPost extends ForumRevisionBody, HeadlessForumPost {
+export interface ForumPost extends ForumRevisionBody, HeadlessForumPost {
 	children: ForumPost[]
 }
 
-interface LocalForumPost extends HeadlessForumPost {
+export interface LocalForumPost extends HeadlessForumPost {
 	revisions: LocalPostRevision[]
 	children: LocalForumPost[]
 }
 
-interface PostRevision {
-	author: User
+export interface PostRevision {
+	author: UserID
 	stamp: number
 	id: number
 }
 
-interface LocalPostRevision extends PostRevision {
+export interface LocalPostRevision extends PostRevision {
 	title: string
 }
 
@@ -239,19 +238,19 @@ function findPost(list: LocalForumPost[], id: number): LocalForumPost | null {
 	return null
 }
 
-interface ForumThread {
+export interface ForumThread {
 	title: string
 	id: number
 	description: string
 	last?: number
-	lastUser?: User
+	lastUser?: UserID
 	started: number
-	startedUser: User
+	startedUser: UserID
 	postsNum: number
 	sticky: boolean
 }
 
-interface LocalForumThread extends ForumThread {
+export interface LocalForumThread extends ForumThread {
 	posts: LocalForumPost[]
 }
 
@@ -447,37 +446,53 @@ export class WikiDot {
 	}
 
 	private static usernameMatcher = /user:info\/(.*)/
+	private static useridMatcher = /WIKIDOT.page.listeners.userInfo\((\d+)\);/
 
-	private static extractUser(elem: HTMLElement | null): User {
+	private static extractUser(elem: HTMLElement | null): [UserID, string | null] {
 		if (elem == null) {
-			return null
+			return [null, null]
 		}
 
-		const regMatch = elem.querySelector('a')?.attributes['href'].match(WikiDot.usernameMatcher)
-		let user: string | number | undefined = regMatch ? regMatch[1] : undefined
+		const regMatch = elem.querySelector('a')?.attributes['onclick']?.match(WikiDot.useridMatcher)
+		const regMatchUsername = elem.querySelector('a')?.attributes['href']?.match(WikiDot.usernameMatcher)
+		let user: number | undefined = regMatch ? parseInt(regMatch[1]) : undefined
+		const username = regMatchUsername ? regMatchUsername[1] : null
 
 		if (user === undefined) {
-			user = elem.querySelector('span.deleted')?.attributes['data-id']
+			const user2 = elem.querySelector('span.deleted')?.attributes['data-id']
 
-			if (user) {
-				user = parseInt(user)
+			if (user2 != undefined) {
+				user = parseInt(user2)
 			}
 		}
 
 		// in case we got passed the root element of user span
 		if (user === undefined) {
-			user = elem.attributes['data-id']
+			const user2 = elem.attributes['data-id']
 
-			if (user) {
-				user = parseInt(user)
+			if (user2 != undefined) {
+				user = parseInt(user2)
 			}
 		}
 
 		if (user === undefined) {
-			return null
+			return [null, null]
 		}
 
-		return user
+		return [user, username]
+	}
+
+	private matchAndFetchUser(elem: HTMLElement | null): UserID {
+		const [a, b] = WikiDot.extractUser(elem)
+
+		if (a !== null && b !== null) {
+			this.userList.fetchOptional(a, b).catch((err) => {
+				this.error(`Caught an error while trying to fetch user ${b}<${a}>`)
+				this.error(err)
+			})
+		}
+
+		return a
 	}
 
 	// spoon library
@@ -583,6 +598,7 @@ export class WikiDot {
 		private workingDirectory: string = `./storage/${name}`,
 		public client: HTTPClient,
 		public queue: PromiseQueue,
+		public userList: WikidotUserList,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
@@ -708,7 +724,7 @@ export class WikiDot {
 			const url = elem.querySelector('td.title')?.querySelector('a')?.attrs['href']
 			const revisionText = elem.querySelector('td.revision-no')?.innerText
 			const revision = revisionText?.match(/([0-9]+)/)
-			const mod_by = WikiDot.extractUser(elem.querySelector('td.mod-by'))
+			const mod_by = this.matchAndFetchUser(elem.querySelector('td.mod-by'))
 
 			if (url != undefined) {
 				const obj: RecentChange = {
@@ -815,7 +831,7 @@ export class WikiDot {
 				continue
 			}
 
-			const author = WikiDot.extractUser(values[4] as HTMLElement)
+			const author = this.matchAndFetchUser(values[4] as HTMLElement)
 			const time = values[5].querySelector('span')?.attrs['class']?.match(WikiDot.dateMatcher)
 			const commentary = values[6].textContent.trim()
 
@@ -1005,10 +1021,10 @@ export class WikiDot {
 
 		const html = parse(json.body)
 
-		let lastUser: User | undefined = undefined
+		let lastUser: UserID | undefined = undefined
 		let lastRating: boolean | undefined = undefined
 		let row = 0
-		const listing: [User, boolean][] = []
+		const listing: [UserID, boolean][] = []
 
 		let findDiv: HTMLElement | undefined = undefined
 
@@ -1037,7 +1053,7 @@ export class WikiDot {
 				} else if (elem.tagName.toLowerCase() == 'span') {
 					if (lastUser === undefined) {
 						// must be an user
-						lastUser = WikiDot.extractUser(elem)
+						lastUser = this.matchAndFetchUser(elem)
 					} else if (lastRating === undefined) {
 						// must be a vote
 						const decoded = elem.textContent.trim()
@@ -1124,7 +1140,7 @@ export class WikiDot {
 
 				const lastDateElemMatch = last.querySelector('span.odate')?.attributes['class'].match(WikiDot.dateMatcher)
 				const lastDate = lastDateElemMatch != undefined && lastDateElemMatch != null ? parseInt(lastDateElemMatch[1]) : undefined
-				const lastUser = WikiDot.extractUser(last)
+				const lastUser = this.matchAndFetchUser(last)
 
 				listing.push({
 					title: titleText,
@@ -1176,9 +1192,9 @@ export class WikiDot {
 			const description = name.querySelector('div.description')!.textContent.trim()
 			const postsNum = parseInt(posts.innerText.trim())
 			const lastDate = last.childNodes.length > 1 ? parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1]) : undefined
-			const lastUser = last.childNodes.length > 1 ? WikiDot.extractUser(last) : undefined
+			const lastUser = last.childNodes.length > 1 ? this.matchAndFetchUser(last) : undefined
 			const startedDate = parseInt(started.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
-			const startedUser = WikiDot.extractUser(started)
+			const startedUser = this.matchAndFetchUser(started)
 
 			listing.push({
 				title: titleText,
@@ -1239,7 +1255,7 @@ export class WikiDot {
 
 	private static postRegExp = /post-([0-9]+)/
 
-	private static parsePost(postContainer: HTMLElement): ForumPost {
+	private parsePost(postContainer: HTMLElement): ForumPost {
 		let post: HTMLElement | null = null
 		const childrenCointainers: HTMLElement[] = []
 
@@ -1257,7 +1273,7 @@ export class WikiDot {
 			return {
 				id: -1,
 				title: 'ERROR',
-				poster: 'ERROR',
+				poster: null,
 				content: 'ERROR',
 				stamp: -1,
 				children: []
@@ -1273,7 +1289,7 @@ export class WikiDot {
 			return {
 				id: -1,
 				title: 'ERROR',
-				poster: 'ERROR',
+				poster: null,
 				content: 'ERROR',
 				stamp: -1,
 				children: []
@@ -1286,14 +1302,14 @@ export class WikiDot {
 			return {
 				id: -1,
 				title: 'ERROR',
-				poster: 'ERROR',
+				poster: null,
 				content: 'ERROR',
 				stamp: -1,
 				children: []
 			}
 		}
 
-		const poster = WikiDot.extractUser(info)
+		const poster = this.matchAndFetchUser(info)
 		const stamp = parseInt(info.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
 
 		const contentHtml = content.innerHTML
@@ -1311,7 +1327,7 @@ export class WikiDot {
 
 		if (changes != null) {
 			const stamp = parseInt(changes.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
-			const poster = WikiDot.extractUser(changes)
+			const poster = this.matchAndFetchUser(changes)
 
 			obj.lastEdit = stamp
 			obj.lastEditBy = poster
@@ -1346,7 +1362,7 @@ export class WikiDot {
 		const listing: ForumPost[] = []
 
 		for (const container of containers) {
-			listing.push(WikiDot.parsePost(container))
+			listing.push(this.parsePost(container))
 		}
 
 		return listing
@@ -1382,7 +1398,7 @@ export class WikiDot {
 
 		for (const row of table.querySelectorAll('tr')) {
 			const columns = row.querySelectorAll('td')
-			const author = WikiDot.extractUser(columns[0])
+			const author = this.matchAndFetchUser(columns[0])
 			const stamp = parseInt(columns[1].querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
 			const id = parseInt(columns[2].querySelector('a')!.attributes['onclick'].match(/([0-9]+)/)![1])
 
@@ -1562,7 +1578,7 @@ export class WikiDot {
 
 	private static fileSizeMatcher = /([0-9]+) bytes/i
 
-	public async fetchFileMeta(file_id: number) {
+	public async fetchFileMeta(file_id: number): Promise<FileMeta> {
 		this.log(`Fetching file meta of ${file_id}`)
 
 		const json = await this.fetchJson({
@@ -1585,7 +1601,7 @@ export class WikiDot {
 		const uploader = rows[5].querySelectorAll('td')[1]
 		const date = rows[6].querySelectorAll('td')[1]
 
-		const matchAuthor = WikiDot.extractUser(uploader)
+		const matchAuthor = this.matchAndFetchUser(uploader)
 
 		return {
 			file_id: file_id,

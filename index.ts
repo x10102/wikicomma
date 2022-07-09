@@ -26,6 +26,7 @@ import { promises } from 'fs'
 import { RatelimitBucket } from './RatelimitBucket'
 import { HTTPClient } from './HTTPClient'
 import { blockingQueue, parallel, PromiseQueue } from './worker'
+import { WikidotUserList } from './WikidotUserList'
 
 interface DaemonConfig {
 	base_directory: string
@@ -53,8 +54,26 @@ interface DaemonConfig {
 		process.exit(1)
 	}
 
+	function makeClient() {
+		const client = new HTTPClient(
+			3,
+			config.http_proxy?.address,
+			config.http_proxy?.port,
+			config.socks_proxy?.address,
+			config.socks_proxy?.port,
+		)
+
+		if (config.ratelimit != undefined) {
+			client.ratelimit = new RatelimitBucket(config.ratelimit.bucket_size, config.ratelimit.refill_seconds)
+			client.ratelimit.starTimer()
+		}
+
+		return client
+	}
+
 	const tasks: any[] = []
 	const lock = new Lock()
+	const userList = new WikidotUserList(config.base_directory + '/_users', makeClient())
 
 	for (let {name, url} of config.wikis) {
 		tasks.push(async function() {
@@ -63,18 +82,7 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
-				const client = new HTTPClient(
-					8,
-					config.http_proxy?.address,
-					config.http_proxy?.port,
-					config.socks_proxy?.address,
-					config.socks_proxy?.port,
-				)
-
-				if (config.ratelimit != undefined) {
-					client.ratelimit = new RatelimitBucket(config.ratelimit.bucket_size, config.ratelimit.refill_seconds)
-					client.ratelimit.starTimer()
-				}
+				const client = makeClient()
 
 				try {
 					const wiki = new WikiDot(
@@ -82,15 +90,14 @@ interface DaemonConfig {
 						url,
 						`${config.base_directory}/${name}`,
 						client,
-						new PromiseQueue(config.delay_ms, config.maximum_jobs)
+						new PromiseQueue(config.delay_ms, config.maximum_jobs),
+						userList
 					)
 
 					await wiki.fetchToken()
 					await wiki.workLoop(lock)
 				} finally {
-					if (client.ratelimit != undefined) {
-						client.ratelimit.stopTimer()
-					}
+					client.ratelimit?.stopTimer()
 				}
 			} catch(err) {
 				console.error(`Fetching wiki ${name} failed`)
@@ -99,6 +106,9 @@ interface DaemonConfig {
 		})
 	}
 
-	const worker = blockingQueue(tasks)
-	await parallel(worker, 3)
+	try {
+		await parallel(blockingQueue(tasks), 3)
+	} finally {
+		userList.client.ratelimit?.stopTimer()
+	}
 })()
