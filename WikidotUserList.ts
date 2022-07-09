@@ -78,7 +78,7 @@ export class WikiDotUserList {
 	) {
 	}
 
-	private static bucketSize = 12
+	private static bucketSize = 13
 
 	private fetchedOnce = false
 
