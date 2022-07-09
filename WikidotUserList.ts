@@ -195,6 +195,7 @@ export class WikidotUserList {
 	public async fetchOptional(id: number, username: string): Promise<User | null> {
 		if (!this.fetchedOnce) {
 			await promises.mkdir(this.workFolder, {recursive: true})
+			this.fetchedOnce = true
 
 			try {
 				this.usersToFetch = JSON.parse(await promises.readFile(`${this.workFolder}/pending.json`, {encoding: 'utf-8'}))
@@ -207,8 +208,6 @@ export class WikidotUserList {
 			} catch(err) {
 				console.error(err)
 			}
-
-			this.fetchedOnce = true
 		}
 
 		if (this.fetched.has(username)) {

@@ -297,6 +297,9 @@ export class HTTPClient {
 			})
 
 			agent.maxSockets = this.connections
+			agent.options.maxSockets = this.connections
+			agent.options.maxFreeSockets = this.connections
+			agent.options.maxTotalSockets = this.connections
 			agent.options.keepAlive = true
 			agent.options.keepAliveMsecs = 10000
 
@@ -304,10 +307,35 @@ export class HTTPClient {
 		}
 	}
 
+	private waiters: any[] = []
+	private freeAlloc = this.connections
+
+	private alloc(): Promise<void> {
+		return new Promise((resolve) => {
+			if (this.freeAlloc > 0) {
+				this.freeAlloc--
+				resolve()
+			} else {
+				this.waiters.push(resolve)
+			}
+		})
+	}
+
+	private free() {
+		this.freeAlloc = Math.min(this.freeAlloc + 1, this.connections)
+
+		if (this.waiters.length != 0) {
+			this.waiters.splice(0, 1)[0]()
+			this.freeAlloc--
+		}
+	}
+
 	private async handleRequest(value: BakedRequest) {
 		if (this.ratelimit != undefined) {
 			await this.ratelimit.wait()
 		}
+
+		await this.alloc()
 
 		const buildCookie = this.cookies.build(value.url)
 
@@ -375,6 +403,7 @@ export class HTTPClient {
 						}
 					} catch(err) {
 						value.reject(new HTTPError(response.statusCode, String(err), 'Location URL is invalid: ' + response.headers.location))
+						this.free()
 						return
 					}
 
@@ -389,6 +418,7 @@ export class HTTPClient {
 					response.destroy()
 				}
 
+				this.free()
 				return
 			}
 
@@ -404,6 +434,7 @@ export class HTTPClient {
 
 			response.on('error', (err) => {
 				console.error(`Throw INNER ${err} on ${value.traceback}`)
+				this.free()
 				value.reject(err)
 			})
 
@@ -442,6 +473,8 @@ export class HTTPClient {
 
 				finished = true
 
+				this.free()
+
 				if (response.statusCode == 200 || response.statusCode == 206) {
 					value.resolve(newbuff)
 				} else {
@@ -466,6 +499,7 @@ export class HTTPClient {
 				value.requestFailures++
 				this.handleRequest(value)
 			} else {
+				this.free()
 				value.reject(err)
 			}
 		})
