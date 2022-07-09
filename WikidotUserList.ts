@@ -78,6 +78,8 @@ export class WikidotUserList {
 	) {
 	}
 
+	private static bucketSize = 12
+
 	private fetchedOnce = false
 
 	private usersToFetch: [number, string][] = []
@@ -140,7 +142,7 @@ export class WikidotUserList {
 
 	private async writePrefetch(id: number, data: User, list: {[key: string]: User}) {
 		list[id] = data
-		const bucket = id >> 10
+		const bucket = id >> WikidotUserList.bucketSize
 		await promises.writeFile(`${this.workFolder}/${bucket}.json`, JSON.stringify(list, null, 4))
 	}
 
@@ -161,7 +163,7 @@ export class WikidotUserList {
 	}
 
 	public async readBucket(id: number): Promise<{[key: string]: User} | null> {
-		const bucket = id >> 10
+		const bucket = id >> WikidotUserList.bucketSize
 
 		try {
 			return JSON.parse(await promises.readFile(`${this.workFolder}/${bucket}.json`, {encoding: 'utf-8'}))
