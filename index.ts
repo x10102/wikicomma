@@ -26,7 +26,7 @@ import { promises } from 'fs'
 import { RatelimitBucket } from './RatelimitBucket'
 import { HTTPClient } from './HTTPClient'
 import { blockingQueue, parallel, PromiseQueue } from './worker'
-import { WikidotUserList } from './WikidotUserList'
+import { WikiDotUserList } from './WikidotUserList'
 
 interface DaemonConfig {
 	base_directory: string
@@ -73,7 +73,7 @@ interface DaemonConfig {
 
 	const tasks: any[] = []
 	const lock = new Lock()
-	const userList = new WikidotUserList(config.base_directory + '/_users', makeClient())
+	const userList = new WikiDotUserList(config.base_directory + '/_users', makeClient())
 
 	await userList.initialize()
 

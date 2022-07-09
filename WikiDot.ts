@@ -31,7 +31,7 @@ import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 import { blockingQueue, parallel, PromiseQueue } from "./worker"
-import { WikidotUserList } from "./WikidotUserList"
+import { WikiDotUserList } from "./WikidotUserList"
 
 const sleep = promisify(setTimeout)
 
@@ -598,7 +598,7 @@ export class WikiDot {
 		private workingDirectory: string = `./storage/${name}`,
 		public client: HTTPClient,
 		public queue: PromiseQueue,
-		public userList: WikidotUserList,
+		public userList: WikiDotUserList,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)

@@ -71,7 +71,7 @@ function indexOf(list: [number, string][], value: number): number {
 	return -1
 }
 
-export class WikidotUserList {
+export class WikiDotUserList {
 	constructor(
 		public workFolder: string,
 		public client: HTTPClient
@@ -97,15 +97,15 @@ export class WikidotUserList {
 	private static activity = /Karma level/i
 
 	private static matchers = {
-		real_name: WikidotUserList.real_name,
-		gender: WikidotUserList.gender,
-		birthday: WikidotUserList.birthday,
-		from: WikidotUserList.from,
-		website: WikidotUserList.website,
-		wikidot_user_since: WikidotUserList.wikidot_user_since,
-		bio: WikidotUserList.bio,
-		account_type: WikidotUserList.account_type,
-		activity: WikidotUserList.activity,
+		real_name: WikiDotUserList.real_name,
+		gender: WikiDotUserList.gender,
+		birthday: WikiDotUserList.birthday,
+		from: WikiDotUserList.from,
+		website: WikiDotUserList.website,
+		wikidot_user_since: WikiDotUserList.wikidot_user_since,
+		bio: WikiDotUserList.bio,
+		account_type: WikiDotUserList.account_type,
+		activity: WikiDotUserList.activity,
 	}
 
 	private static activity_levels = {
@@ -142,7 +142,7 @@ export class WikidotUserList {
 
 	private async writePrefetch(id: number, data: User, list: {[key: string]: User}) {
 		list[id] = data
-		const bucket = id >> WikidotUserList.bucketSize
+		const bucket = id >> WikiDotUserList.bucketSize
 		await promises.writeFile(`${this.workFolder}/${bucket}.json`, JSON.stringify(list, null, 4))
 	}
 
@@ -163,7 +163,7 @@ export class WikidotUserList {
 	}
 
 	public async readBucket(id: number): Promise<{[key: string]: User} | null> {
-		const bucket = id >> WikidotUserList.bucketSize
+		const bucket = id >> WikiDotUserList.bucketSize
 
 		try {
 			return JSON.parse(await promises.readFile(`${this.workFolder}/${bucket}.json`, {encoding: 'utf-8'}))
@@ -310,8 +310,8 @@ export class WikidotUserList {
 				const key = dt[i].textContent
 				const value = dd[i].textContent
 
-				for (const name in WikidotUserList.matchers) {
-					const matcher = (WikidotUserList.matchers as {[key: string]: RegExp})[name]
+				for (const name in WikiDotUserList.matchers) {
+					const matcher = (WikiDotUserList.matchers as {[key: string]: RegExp})[name]
 
 					if (key.match(matcher) !== null) {
 						matched_against[name] = value.trim()
@@ -322,7 +322,7 @@ export class WikidotUserList {
 			let gender: boolean | undefined = undefined
 
 			if (matched_against.gender !== undefined) {
-				gender = matched_against.gender.match(WikidotUserList.gender_1) !== null
+				gender = matched_against.gender.match(WikiDotUserList.gender_1) !== null
 			}
 
 			let birthday: number | undefined = undefined
@@ -338,8 +338,8 @@ export class WikidotUserList {
 			let activity = UserActivity.UNKNOWN
 
 			if (matched_against.activity !== undefined) {
-				for (const key in WikidotUserList.activity_levels) {
-					if (matched_against.activity.match((WikidotUserList.activity_levels as {[key: string]: RegExp})[key]) !== null) {
+				for (const key in WikiDotUserList.activity_levels) {
+					if (matched_against.activity.match((WikiDotUserList.activity_levels as {[key: string]: RegExp})[key]) !== null) {
 						activity = UserActivity[key]
 						break
 					}
