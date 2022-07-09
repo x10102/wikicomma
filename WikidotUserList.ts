@@ -61,6 +61,16 @@ interface WaitingRoom {
 	reject: ((error: any) => void)[]
 }
 
+function indexOf(list: [number, string][], value: number): number {
+	for (const i in list) {
+		if (list[i][0] == value) {
+			return Number(i)
+		}
+	}
+
+	return -1
+}
+
 export class WikidotUserList {
 	constructor(
 		public workFolder: string,
@@ -69,6 +79,8 @@ export class WikidotUserList {
 	}
 
 	private fetchedOnce = false
+
+	private usersToFetch: [number, string][] = []
 
 	private static gender_1 = /^male/i
 
@@ -158,9 +170,44 @@ export class WikidotUserList {
 		}
 	}
 
+	private wantToWritePrending = false
+	private writingPending = false
+
+	private async wantsToWritePending() {
+		this.wantToWritePrending = true
+
+		if (this.writingPending) {
+			return
+		}
+
+		this.writingPending = true
+
+		try {
+			while (this.wantToWritePrending) {
+				this.wantToWritePrending = false
+				await promises.writeFile(`${this.workFolder}/pending.json`, JSON.stringify(this.usersToFetch, null, 4))
+			}
+		} finally {
+			this.writingPending = false
+		}
+	}
+
 	public async fetchOptional(id: number, username: string): Promise<User | null> {
 		if (!this.fetchedOnce) {
 			await promises.mkdir(this.workFolder, {recursive: true})
+
+			try {
+				this.usersToFetch = JSON.parse(await promises.readFile(`${this.workFolder}/pending.json`, {encoding: 'utf-8'}))
+
+				for (const [a, b] of this.usersToFetch) {
+					if (a != id) {
+						this.fetchOptional(a, b)
+					}
+				}
+			} catch(err) {
+				console.error(err)
+			}
+
 			this.fetchedOnce = true
 		}
 
@@ -199,6 +246,20 @@ export class WikidotUserList {
 			}
 
 			const path = `https://www.wikidot.com/user:info/${username}`
+
+			waiting_room.resolve.push((_) => {
+				const index = indexOf(this.usersToFetch, id)
+
+				if (index >= 0) {
+					this.usersToFetch.splice(index, 1)
+					this.wantsToWritePending()
+				}
+			})
+
+			if (indexOf(this.usersToFetch, id) == -1) {
+				this.usersToFetch.push([id, username])
+				this.wantsToWritePending()
+			}
 
 			const body = (await this.client.get(path, {headers: {
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
