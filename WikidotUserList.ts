@@ -74,7 +74,8 @@ function indexOf(list: [number, string][], value: number): number {
 export class WikiDotUserList {
 	constructor(
 		public workFolder: string,
-		public client: HTTPClient
+		public client: HTTPClient,
+		public cacheValidFor: number = 86400000
 	) {
 	}
 
@@ -236,7 +237,7 @@ export class WikiDotUserList {
 		try {
 			const fetchExisting = await this.read(id)
 
-			if (fetchExisting !== null && fetchExisting.fetched_at + 6 * 60 * 60 * 1000 >= Date.now()) {
+			if (fetchExisting !== null && fetchExisting.fetched_at + this.cacheValidFor >= Date.now()) {
 				this.fetched.set(username, true)
 
 				for (const fn of waiting_room.resolve) {

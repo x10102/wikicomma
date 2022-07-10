@@ -94,6 +94,7 @@ Example config:
 		"refill_seconds": 45,
 	},
 	"delay_ms": 250,
+	"user_list_cache_freshness": 86400,
 	"maximum_jobs": null,
 	"http_proxy": {
 		"address": "192.168.50.1",
@@ -116,6 +117,7 @@ Example config:
 - `maximum_jobs`: the maximum number of jobs to run simultaneously, optional
 - `http_proxy`: http proxy for http requests, optional
 - `socks_proxy`: socks proxy for https requests, optional
+- `user_list_cache_freshness`: how long is wikidot user info considered fresh, in seconds. optional
 
 # Example usage
 

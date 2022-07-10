@@ -32,6 +32,8 @@ interface DaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
 
+	user_list_cache_freshness?: number
+
 	ratelimit?: { bucket_size: number, refill_seconds: number }
 	delay_ms?: number
 	maximum_jobs?: number
@@ -73,7 +75,7 @@ interface DaemonConfig {
 
 	const tasks: any[] = []
 	const lock = new Lock()
-	const userList = new WikiDotUserList(config.base_directory + '/_users', makeClient())
+	const userList = new WikiDotUserList(config.base_directory + '/_users', makeClient(), config.user_list_cache_freshness !== undefined ? config.user_list_cache_freshness * 1000 : undefined)
 
 	await userList.initialize()
 
