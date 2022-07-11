@@ -65,6 +65,13 @@ This piece of software allows you to do incremental backups of next data from yo
 		- Revision list
 			- Each revision content as HTML file
 		- *Subposts (replies, recusrive tree structure)*
+- Users
+	- Display name
+	- User slug
+	- Account creation date
+	- Account type (e.g. Pro Plus)
+	- Karma (activity), scale of 0-5
+	- *Users are in buckets depending on their ID, right-shifted 13. For instance, user ID `4598089` is in bucket `4598089 >> 13 = 561`.*
 
 Everything is archived incrementally, meaning once backup is made, future backups will be much faster.
 
