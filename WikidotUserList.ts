@@ -41,7 +41,7 @@ export interface User {
 	username: string
 
 	real_name: string
-	gender?: boolean // true = male, false - female
+	gender?: boolean
 	birthday?: number
 	from?: string
 	website?: string
@@ -78,6 +78,9 @@ export class WikiDotUserList {
 		public cacheValidFor: number = 86400000
 	) {
 	}
+
+	public static GENDER_MALE = true
+	public static GENDER_FEMALE = true
 
 	private static bucketSize = 13
 
@@ -323,7 +326,7 @@ export class WikiDotUserList {
 			let gender: boolean | undefined = undefined
 
 			if (matched_against.gender !== undefined) {
-				gender = matched_against.gender.match(WikiDotUserList.gender_1) !== null
+				gender = matched_against.gender.match(WikiDotUserList.gender_1) !== null ? WikiDotUserList.GENDER_MALE : WikiDotUserList.GENDER_FEMALE
 			}
 
 			let birthday: number | undefined = undefined
