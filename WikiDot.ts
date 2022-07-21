@@ -727,7 +727,7 @@ export class WikiDot {
 
 		for (const elem of html.querySelectorAll('.changes-list-item')) {
 			const url = elem.querySelector('td.title')?.querySelector('a')?.attrs['href']
-			const revisionText = elem.querySelector('td.revision-no')?.innerText
+			const revisionText = elem.querySelector('td.revision-no')?.textContent
 			const revision = revisionText?.match(/([0-9]+)/)
 			const mod_by = this.matchAndFetchUser(elem.querySelector('td.mod-by'))
 
@@ -822,14 +822,14 @@ export class WikiDot {
 
 			const values = row.querySelectorAll('td')
 
-			const revision = values[0].innerText.match(/([0-9]+)/)
+			const revision = values[0].textContent.match(/([0-9]+)/)
 
 			if (revision == null) {
 				continue
 			}
 
 			// 1 - buttons
-			const flags = values[2].innerText.trim()
+			const flags = values[2].textContent.trim()
 			const global_revision = values[3].querySelector('a')?.attrs['onclick']?.match(/([0-9]+)/)
 
 			if (global_revision == null) {
@@ -970,14 +970,14 @@ export class WikiDot {
 		const meta: GenericPageData = {}
 
 		for (const elem of html.querySelectorAll('head script')) {
-			const matchAgainstPage = elem.innerText.match(/WIKIREQUEST\.info\.pageId\s*=\s*([0-9]+);/i)
+			const matchAgainstPage = elem.textContent.match(/WIKIREQUEST\.info\.pageId\s*=\s*([0-9]+);/i)
 
 			if (matchAgainstPage != null) {
 				meta.page_id = parseInt(matchAgainstPage[1])
 			}
 		}
 
-		const ratingElem = html.querySelector('span.rate-points')?.querySelector('span.number')?.innerText
+		const ratingElem = html.querySelector('span.rate-points')?.querySelector('span.number')?.textContent
 
 		if (ratingElem != undefined) {
 			meta.rating = parseInt(ratingElem)
@@ -1140,8 +1140,8 @@ export class WikiDot {
 				const categoryID = parseInt(titleElem.attributes['href'].match(WikiDot.categoryRegExp)![1])
 				const description = name.querySelector('div.description')!.textContent.trim()
 
-				const threadsNum = parseInt(threads.innerText.trim())
-				const postsNum = parseInt(posts.innerText.trim())
+				const threadsNum = parseInt(threads.textContent.trim())
+				const postsNum = parseInt(posts.textContent.trim())
 
 				const lastDateElemMatch = last.querySelector('span.odate')?.attributes['class'].match(WikiDot.dateMatcher)
 				const lastDate = lastDateElemMatch != undefined && lastDateElemMatch != null ? parseInt(lastDateElemMatch[1]) : undefined
@@ -1192,10 +1192,10 @@ export class WikiDot {
 			const threadID = parseInt(titleElem.attributes['href'].match(WikiDot.threadRegExp)![1])
 
 			// fairly weak check
-			const sticky = (title.firstChild instanceof TextNode) ? title.firstChild.innerText.trim() != '' : false
+			const sticky = (title.firstChild instanceof TextNode) ? title.firstChild.textContent.trim() != '' : false
 
 			const description = name.querySelector('div.description')!.textContent.trim()
-			const postsNum = parseInt(posts.innerText.trim())
+			const postsNum = parseInt(posts.textContent.trim())
 			const lastDate = last.childNodes.length > 1 ? parseInt(last.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1]) : undefined
 			const lastUser = last.childNodes.length > 1 ? this.matchAndFetchUser(last) : undefined
 			const startedDate = parseInt(started.querySelector('span.odate')!.attributes['class'].match(WikiDot.dateMatcher)![1])
@@ -1321,7 +1321,7 @@ export class WikiDot {
 
 		const obj: ForumPost = {
 			id: postId,
-			title: title.innerText.trim(),
+			title: title.textContent.trim(),
 			poster: poster,
 			content: contentHtml,
 			stamp: stamp,
