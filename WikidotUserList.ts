@@ -208,7 +208,9 @@ export class WikiDotUserList {
 
 				for (const [a, b] of this.usersToFetch) {
 					if (a != skipid) {
-						this.fetchOptional(a, b)
+						this.fetchOptional(a, b).catch((err) => {
+							process.stderr.write(`Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
+						})
 					}
 				}
 			} catch(err) {
