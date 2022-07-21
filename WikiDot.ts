@@ -1569,12 +1569,12 @@ export class WikiDot {
 
 		return {
 			file_id: file_id,
-			name: name.innerText.trim().replace(/\//g, '%2F'),
+			name: name.textContent.trim(),
 			url: fullURL.querySelector('a')?.attrs['href']!,
-			size: size.innerText.trim(),
-			size_bytes: parseInt(size.innerText.match(WikiDot.fileSizeMatcher)![1]),
-			mime: mime.innerText.trim(),
-			content: contentType.innerText.trim(),
+			size: size.textContent.trim(),
+			size_bytes: parseInt(size.textContent.match(WikiDot.fileSizeMatcher)![1]),
+			mime: mime.textContent.trim(),
+			content: contentType.textContent.trim(),
 			author: matchAuthor,
 			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!)
 		}
