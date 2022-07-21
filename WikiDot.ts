@@ -695,6 +695,11 @@ export class WikiDot {
 		const json = JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
 
 		if (!custom && json.status != 'ok') {
+			if (json.status === 'wrong_token7') {
+				this.fetchingToken = false
+				await this.fetchToken()
+			}
+
 			throw Error(`Server returned ${json.status}, message: ${json.message}`)
 		}
 
