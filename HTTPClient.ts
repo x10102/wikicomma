@@ -378,8 +378,32 @@ export class HTTPClient {
 		}
 
 		let finished = false
+		let lastActivity = Date.now()
+		let stream: http.IncomingMessage | undefined = undefined
+
+		const timeoutID = setInterval(() => {
+			if (finished) {
+				clearInterval(timeoutID)
+				return
+			}
+
+			if (lastActivity + 10000 < Date.now()) {
+				// damn SLOW
+				// better to reject
+
+				clearInterval(timeoutID)
+				stream?.destroy()
+				finished = true
+
+				if (stream === undefined)
+					this.free()
+			}
+		}, 1000)
 
 		const callback = (response: http.IncomingMessage) => {
+			stream = response
+			lastActivity = Date.now()
+
 			if (response.headers['set-cookie']) {
 				for (const cookie of response.headers['set-cookie']) {
 					this.cookies.put(cookie, value.url.host)
@@ -411,9 +435,11 @@ export class HTTPClient {
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
 					this.handleRequest(value)
 					finished = true
+					clearInterval(timeoutID)
 					response.destroy()
 				} else {
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
+					clearInterval(timeoutID)
 					finished = true
 					response.destroy()
 				}
@@ -429,6 +455,7 @@ export class HTTPClient {
 			let memcache: Buffer[] = []
 
 			response.on('data', (chunk: Buffer) => {
+				lastActivity = Date.now()
 				memcache.push(chunk)
 			})
 
@@ -436,9 +463,11 @@ export class HTTPClient {
 				console.error(`Throw INNER ${err} on ${value.traceback}`)
 				this.free()
 				value.reject(err)
+				clearInterval(timeoutID)
 			})
 
 			response.on('end', async () => {
+				clearInterval(timeoutID)
 				let size = 0
 
 				for (const buff of memcache) {
@@ -494,12 +523,16 @@ export class HTTPClient {
 				return
 			}
 
+			finished = true
+			clearInterval(timeoutID)
+
+			this.free()
+
 			// accept two failures
 			if (value.requestFailures < 2) {
 				value.requestFailures++
 				this.handleRequest(value)
 			} else {
-				this.free()
 				value.reject(err)
 			}
 		})
