@@ -696,6 +696,7 @@ export class WikiDot {
 
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
+				await sleep(30_000)
 				this.fetchingToken = false
 				await this.fetchToken(true)
 			}
