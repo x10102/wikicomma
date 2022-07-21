@@ -26,8 +26,6 @@ import { HTTPClient, RequestConfig } from './HTTPClient'
 import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises, read } from 'fs'
 import { promisify } from 'util'
-import { unescape } from 'html-escaper'
-import Seven, { list } from 'node-7z'
 import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 import { blockingQueue, parallel, PromiseQueue } from "./worker"
