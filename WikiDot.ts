@@ -643,6 +643,8 @@ export class WikiDot {
 		process.stderr.write(`[${this.name}]: ${str}\n`)
 	}
 
+	private tokenFetchedAt = 0
+
 	public async fetchToken(force = false) {
 		if (this.fetchingToken) {
 			return
@@ -651,6 +653,7 @@ export class WikiDot {
 		await this.initialize()
 
 		this.fetchingToken = true
+		this.tokenFetchedAt++
 
 		if (!force && this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value != undefined) {
 			return
@@ -696,10 +699,14 @@ export class WikiDot {
 
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
+				const lastFetch = this.tokenFetchedAt
 				this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
 				await sleep(30_000)
-				this.fetchingToken = false
-				await this.fetchToken(true)
+
+				if (this.tokenFetchedAt == lastFetch) {
+					this.fetchingToken = false
+					await this.fetchToken(true)
+				}
 			}
 
 			throw Error(`Server returned ${json.status}, message: ${json.message}`)
