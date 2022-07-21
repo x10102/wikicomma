@@ -101,6 +101,8 @@ export interface FileMeta {
 	content: string
 	author: UserID
 	stamp: number
+
+	internal_version?: number
 }
 
 /**
@@ -1539,6 +1541,7 @@ export class WikiDot {
 	}
 
 	private static fileSizeMatcher = /([0-9]+) bytes/i
+	private static FILEMETA_VERSION = 1
 
 	public async fetchFileMeta(file_id: number): Promise<FileMeta> {
 		this.log(`Fetching file meta of ${file_id}`)
@@ -1574,7 +1577,8 @@ export class WikiDot {
 			mime: mime.textContent.trim(),
 			content: contentType.textContent.trim(),
 			author: matchAuthor,
-			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!)
+			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!),
+			internal_version: WikiDot.FILEMETA_VERSION
 		}
 	}
 
@@ -1635,7 +1639,7 @@ export class WikiDot {
 			let hit = false
 
 			for (const emeta of existing) {
-				if (emeta.file_id == file_id) {
+				if (emeta.file_id == file_id && emeta.internal_version != undefined && emeta.internal_version >= WikiDot.FILEMETA_VERSION) {
 					hit = true
 					list2.push(emeta)
 					break
