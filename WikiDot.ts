@@ -1429,7 +1429,7 @@ export class WikiDot {
 	}
 
 	// high-level api
-	private downloadingFiles = new Map<string, boolean>()
+	private downloadingFiles: number[] = []
 	private static localFileMatch = /\/local--files\/(.+)/i
 
 	private static splitFilePath(path: string): [string, string, string] {
@@ -1478,9 +1478,9 @@ export class WikiDot {
 		this.fileMap.markDirty()
 	}
 
-	public async fileExists(recombined: string) {
+	public async fileExists(page_id: string, file_id: number) {
 		try {
-			await promises.stat(`${this.workingDirectory}/files/${recombined}`)
+			await promises.stat(`${this.workingDirectory}/files/${page_id}/${file_id}`)
 			return true
 		} catch(err) {
 
@@ -1489,12 +1489,12 @@ export class WikiDot {
 		return false
 	}
 
-	private async fetchFileInner(fileMeta: {url: string, file_id: number}, pageName: string, recombined: string, config?: RequestConfig) {
+	private async fetchFileInner(fileMeta: {url: string, file_id: number}, pageName: string, config?: RequestConfig) {
 		this.log(`Fetching file ${fileMeta.url}`)
 
 		await this.client.get(fileMeta.url, config).then(async buffer => {
 			await promises.mkdir(`${this.workingDirectory}/files/${pageName}`, {recursive: true})
-			await promises.writeFile(`${this.workingDirectory}/files/${recombined}`, buffer)
+			await promises.writeFile(`${this.workingDirectory}/files/${pageName}/${fileMeta.file_id}`, buffer)
 			this.removePendingFiles(fileMeta.file_id)
 		}).catch(err => {
 			this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
@@ -1513,18 +1513,18 @@ export class WikiDot {
 				const [pageName, fileName, recombined] = match
 				metadata.push(fileMeta)
 
-				if (this.downloadingFiles.has(recombined)) {
+				if (this.downloadingFiles.includes(fileMeta.file_id)) {
 					continue
 				}
 
-				this.downloadingFiles.set(recombined, true)
+				this.downloadingFiles.push(fileMeta.file_id)
 				this.writeToFileMap(fileMeta, pageName, fileName)
 
-				if (await this.fileExists(recombined)) {
+				if (await this.fileExists(pageName, fileMeta.file_id)) {
 					continue
 				}
 
-				this.fetchFileInner(fileMeta, pageName, recombined, {
+				this.fetchFileInner(fileMeta, pageName, {
 					headers: {
 						'Referer': this.url
 					}
@@ -1533,47 +1533,6 @@ export class WikiDot {
 		}
 
 		return metadata
-	}
-
-	public async fetchFilesFrom(body: string, page_id?: number) {
-		const urls = body.match(WikiDot.urlMatcher)
-
-		if (urls == null) {
-			return false
-		}
-
-		for (const url of urls) {
-			const match = url.match(WikiDot.localFileMatch)
-
-			if (match != null) {
-				if (this.downloadingFiles.has(match[1])) {
-					continue
-				}
-
-				this.downloadingFiles.set(match[1], true)
-
-				const split = match[1].split('/')
-				const last = split.splice(split.length - 1)[0]
-
-				try {
-					await promises.stat(`${this.workingDirectory}/files/${split.join('/')}/${last}`)
-					break
-				} catch(err) {
-
-				}
-
-				this.log(`Fetching file ${url}`)
-
-				this.client.get(url).then(async buffer => {
-					await promises.mkdir(`${this.workingDirectory}/files/${split.join('/')}`, {recursive: true})
-					await promises.writeFile(`${this.workingDirectory}/files/${split.join('/')}/${last.replace(/\?/g, '@')}`, buffer)
-				}).catch(err => {
-					this.log(`Unable to fetch ${url} because ${err}`)
-				})
-			}
-		}
-
-		return true
 	}
 
 	private static fileSizeMatcher = /([0-9]+) bytes/i
@@ -1665,16 +1624,6 @@ export class WikiDot {
 		}
 	}
 
-	public async fetchFileMetaList(page_id: number) {
-		const list = []
-
-		for (const file_id of await this.fetchFileList(page_id)) {
-			list.push(this.fetchFileMeta(file_id))
-		}
-
-		return await Promise.all(list)
-	}
-
 	public async fetchFileMetaListForce(page_id: number, existing: FileMeta[] = []) {
 		const list = []
 		const list2 = []
@@ -1685,6 +1634,7 @@ export class WikiDot {
 			for (const emeta of existing) {
 				if (emeta.file_id == file_id) {
 					hit = true
+					list2.push(emeta)
 					break
 				}
 			}
@@ -1694,13 +1644,13 @@ export class WikiDot {
 			}
 		}
 
-		list2.push(...existing)
+		// list2.push(...existing)
 		list2.push(...(await Promise.all(list)))
 
 		return list2
 	}
 
-	private static META_VERSION = 15
+	private static META_VERSION = 16
 
 	public async workLoop(lock: Lock) {
 		await this.initialize()
@@ -1934,10 +1884,33 @@ export class WikiDot {
 
 						for (let i0 = 0; i0 < 3; i0++) {
 							try {
+								const oldfiles = newMeta.files
 								newMeta.files = await this.fetchFilesFor(pageMeta.page_id, newMeta.files)
+
+								// search for removed files
+								for (const emeta of oldfiles) {
+									let hit = false
+
+									for (const nmeta of newMeta.files) {
+										if (nmeta.file_id == emeta.file_id) {
+											hit = true
+											break
+										}
+									}
+
+									if (!hit) {
+										try {
+											this.log(`File ${emeta.file_id} <${emeta.url}> inside ${pageName} <${pageMeta.page_id}> got removed`)
+											await promises.unlink(`${this.workingDirectory}/files/${pageName}/${emeta.file_id}`)
+										} catch(err) {
+
+										}
+									}
+								}
+
 								break
 							} catch(err) {
-								this.error(`Encountered error fetching ${pageName} voters: ${err}`)
+								this.error(`Encountered error fetching ${pageName} files: ${err}`)
 							}
 						}
 
@@ -2287,11 +2260,11 @@ export class WikiDot {
 				if (match != null) {
 					const [pageName, fileName, recombined] = match
 
-					if (await this.fileExists(recombined)) {
+					if (await this.fileExists(pageName, id)) {
 						continue
 					}
 
-					this.fetchFileInner({url: mapped.url, file_id: id}, pageName, recombined, {
+					this.fetchFileInner({url: mapped.url, file_id: id}, pageName, {
 						headers: {
 							'Cache-Control': 'no-cache',
 							'Referer': this.url,
@@ -2741,6 +2714,13 @@ export class WikiDot {
 		try {
 			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
 			await promises.rm(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+		} catch(err) {
+			// this.error(String(err))
+		}
+
+		try {
+			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
+			await promises.rm(`${this.workingDirectory}/files/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
 			// this.error(String(err))
 		}
