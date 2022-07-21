@@ -1492,9 +1492,14 @@ export class WikiDot {
 		this.fileMap.markDirty()
 	}
 
-	public async fileExists(page_id: string, file_id: number) {
+	public async fileExists(page_id: string, file_id: number, size?: number) {
 		try {
-			await promises.stat(`${this.workingDirectory}/files/${page_id}/${file_id}`)
+			const stats = await promises.stat(`${this.workingDirectory}/files/${page_id}/${file_id}`)
+
+			if (size !== undefined && stats.size != size) {
+				return false
+			}
+
 			return true
 		} catch(err) {
 
@@ -1534,7 +1539,7 @@ export class WikiDot {
 				this.downloadingFiles.push(fileMeta.file_id)
 				this.writeToFileMap(fileMeta, pageName, fileName)
 
-				if (await this.fileExists(pageName, fileMeta.file_id)) {
+				if (await this.fileExists(pageName, fileMeta.file_id, fileMeta.size_bytes)) {
 					continue
 				}
 
