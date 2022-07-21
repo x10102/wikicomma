@@ -7,6 +7,7 @@ A WikiDot farm wiki archiving tool
 
 - Node.JS >= 16
 - Linux (recommended) or Windows host
+- 7z command line tool available in PATH
 
 # Archivable content
 
