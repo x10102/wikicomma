@@ -696,6 +696,7 @@ export class WikiDot {
 
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
+				this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
 				await sleep(30_000)
 				this.fetchingToken = false
 				await this.fetchToken(true)
