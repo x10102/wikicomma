@@ -2614,8 +2614,29 @@ export class WikiDot {
 		if (txts.length != 0) {
 			this.log(`Compressing revisions of ${normalizedName}`)
 
+			let rethrow = false
+			const zipPath = `${this.workingDirectory}/pages/${normalizedName}.7z`
+
+			try {
+				const stats = await promises.stat(zipPath)
+
+				if (!stats.isFile()) {
+					rethrow = true
+					throw new Error(`${zipPath} is not a file!!!`)
+				}
+
+				if (stats.size == 0) {
+					this.error(`${zipPath} is zero length!`)
+					await promises.unlink(zipPath)
+				}
+			} catch(err) {
+				if (rethrow) {
+					throw err
+				}
+			}
+
 			await addZipFiles(
-				`${this.workingDirectory}/pages/${normalizedName}.7z`,
+				zipPath,
 				// txts,
 				// TODO: ENAMETOOLONG, if it is really needed (due to conditions above)
 				// if there are many txt files.
@@ -2683,8 +2704,29 @@ export class WikiDot {
 
 		this.log(`Compressing forum thread ${thread} in category ${category}`)
 
+		let rethrow = false
+		const zipPath = `${this.workingDirectory}/forum/${category}/${thread}.7z`
+
+		try {
+			const stats = await promises.stat(zipPath)
+
+			if (!stats.isFile()) {
+				rethrow = true
+				throw new Error(`${zipPath} is not a file!!!`)
+			}
+
+			if (stats.size == 0) {
+				this.error(`${zipPath} is zero length!`)
+				await promises.unlink(zipPath)
+			}
+		} catch(err) {
+			if (rethrow) {
+				throw err
+			}
+		}
+
 		await addZipFiles(
-			`${this.workingDirectory}/forum/${category}/${thread}.7z`,
+			zipPath,
 			`${this.workingDirectory}/forum/${category}/${thread}/*.*`,
 
 			{
