@@ -694,31 +694,36 @@ export class WikiDot {
 		return await this.client.post(this.ajaxURL.href, assemble)
 	}
 
-	private waitTokenRefreshUntil = 0
+	private tokenInvalidated = false
+	private tokenWaiters: any[] = []
 
-	private async fetchJson(options: any, custom = false, headers?: OutgoingHttpHeaders) {
+	private async fetchJson(options: any, custom = false, headers?: OutgoingHttpHeaders): Promise<any> {
+		if (this.tokenInvalidated) {
+			await new Promise((resolve) => this.tokenWaiters.push(resolve))
+		}
+
 		const json = JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
 
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
-				const lastFetch = this.tokenFetchedAt
+				this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
+				this.tokenInvalidated = true
 
-				if (this.waitTokenRefreshUntil < Date.now()) {
-					this.waitTokenRefreshUntil = Date.now() + 30_000
+				await sleep(30_000)
+
+				this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
+				this.fetchingToken = false
+				await this.fetchToken(true)
+
+				for (const waiter of this.tokenWaiters) {
+					waiter()
 				}
 
-				this.error(`!!! Wikidot invalidated our token, waiting ${Math.floor((this.waitTokenRefreshUntil - Date.now()) / 1000)} seconds....`)
-
-				await sleep(this.waitTokenRefreshUntil - Date.now())
-
-				if (this.tokenFetchedAt == lastFetch) {
-					this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
-					this.fetchingToken = false
-					await this.fetchToken(true)
-				}
+				this.tokenWaiters = []
+				return await this.fetchJson(options, custom, headers)
+			} else {
+				throw Error(`Server returned ${json.status}, message: ${json.message}`)
 			}
-
-			throw Error(`Server returned ${json.status}, message: ${json.message}`)
 		}
 
 		return json
