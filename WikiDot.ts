@@ -708,7 +708,7 @@ export class WikiDot {
 					this.waitTokenRefreshUntil = Date.now() + 30_000
 				}
 
-				await sleep(this.waitTokenRefreshUntil)
+				await sleep(this.waitTokenRefreshUntil - Date.now())
 
 				if (this.tokenFetchedAt == lastFetch) {
 					this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
