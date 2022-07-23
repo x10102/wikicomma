@@ -348,9 +348,24 @@ export class HTTPClient {
 		}
 	}
 
+	private regenerateAt = Date.now()
+
 	private async handleRequest(value: BakedRequest) {
 		if (this.ratelimit != undefined) {
 			await this.ratelimit.wait()
+		}
+
+		let regenerateAmount = Math.floor((Date.now() - this.regenerateAt) / 10_000)
+
+		if (regenerateAmount > 0) {
+			// hack around weird bug when free never gets called
+			// and maybe also promise on request never returns????
+			this.regenerateAt += regenerateAmount * 10_000
+
+			while (this.freeAlloc < this.connections && regenerateAmount > 0) {
+				this.free()
+				regenerateAmount--
+			}
 		}
 
 		await this.alloc()
@@ -410,8 +425,9 @@ export class HTTPClient {
 				// better to reject
 
 				clearInterval(timeoutID)
-				stream?.destroy()
 				finished = true
+				value.reject('Too slow download stream')
+				stream?.destroy()
 
 				if (stream === undefined)
 					this.free()
@@ -478,6 +494,10 @@ export class HTTPClient {
 			})
 
 			response.on('error', (err) => {
+				if (finished) {
+					return
+				}
+
 				console.error(`Throw INNER ${err} on ${value.traceback}`)
 				this.free()
 				value.reject(err)
@@ -486,6 +506,8 @@ export class HTTPClient {
 
 			response.on('end', async () => {
 				clearInterval(timeoutID)
+				this.free()
+
 				let size = 0
 
 				for (const buff of memcache) {
@@ -519,8 +541,6 @@ export class HTTPClient {
 				}
 
 				finished = true
-
-				this.free()
 
 				if (response.statusCode == 200 || response.statusCode == 206) {
 					value.resolve(newbuff)
