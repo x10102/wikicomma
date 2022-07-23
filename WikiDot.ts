@@ -706,21 +706,27 @@ export class WikiDot {
 
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
-				this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
-				this.tokenInvalidated = true
+				const locked = this.tokenInvalidated
 
-				await sleep(30_000)
+				if (!locked) {
+					this.tokenInvalidated = true
+					this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
+					await sleep(30_000)
 
-				this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
-				this.fetchingToken = false
-				await this.fetchToken(true)
-				this.tokenInvalidated = false
+					this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
+					this.fetchingToken = false
+					await this.fetchToken(true)
+					this.tokenInvalidated = false
 
-				for (const waiter of this.tokenWaiters) {
-					waiter()
+					for (const waiter of this.tokenWaiters) {
+						waiter()
+					}
+
+					this.tokenWaiters = []
+				} else {
+					await new Promise((resolve) => this.tokenWaiters.push(resolve))
 				}
 
-				this.tokenWaiters = []
 				return await this.fetchJson(options, custom, headers)
 			} else {
 				throw Error(`Server returned ${json.status}, message: ${json.message}`)
