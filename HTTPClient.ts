@@ -185,6 +185,24 @@ export class CookieJar {
 		return result.join('; ')
 	}
 
+	public removeSpecific(url: urlModule.URL, name: string) {
+		for (const cookie of this.get(url)) {
+			if (cookie.name == name) {
+				const i = this.cookies.indexOf(cookie)
+
+				if (i == -1) {
+					throw new Error('HOW')
+				}
+
+				this.cookies.splice(i, 1)
+
+				return cookie
+			}
+		}
+
+		return null
+	}
+
 	public put(cookie: string, domain: string): boolean {
 		const split = cookie.split(';')
 
