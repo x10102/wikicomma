@@ -420,7 +420,7 @@ export class HTTPClient {
 				return
 			}
 
-			if (lastActivity + 10000 < Date.now()) {
+			if (lastActivity + 20_000 < Date.now()) {
 				// damn SLOW
 				// better to reject
 
