@@ -702,11 +702,12 @@ export class WikiDot {
 		if (!custom && json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
 				const lastFetch = this.tokenFetchedAt
-				this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
 
 				if (this.waitTokenRefreshUntil < Date.now()) {
 					this.waitTokenRefreshUntil = Date.now() + 30_000
 				}
+
+				this.error(`!!! Wikidot invalidated our token, waiting ${Math.floor((this.waitTokenRefreshUntil - Date.now()) / 1000)} seconds....`)
 
 				await sleep(this.waitTokenRefreshUntil - Date.now())
 
