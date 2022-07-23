@@ -282,6 +282,67 @@ export class CookieJar {
 
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
+class ConnectionSlot {
+	private timer?: NodeJS.Timer
+	private token = -1
+	private lastActivity = Date.now()
+
+	private lockups = 0
+
+	constructor(private callback: (slot: ConnectionSlot) => any, private slotID: number) {
+
+	}
+
+	public heartbeat() {
+		this.lastActivity = Date.now()
+	}
+
+	public lock() {
+		if (this.timer !== undefined) {
+			return false
+		}
+
+		this.timer = setInterval(() => {
+			if (this.lastActivity + 10_000 < Date.now()) {
+				this._unlock()
+			}
+		}, 1_000)
+
+		return ++this.token
+	}
+
+	private _unlock() {
+		clearInterval(this.timer!)
+		this.lastActivity = Date.now()
+		this.timer = undefined
+		this.callback(this)
+	}
+
+	public unlock(token: number) {
+		if (this.timer === undefined || this.token != token) {
+			return false
+		}
+
+		this._unlock()
+
+		return true
+	}
+}
+
+class ConnectionLock {
+	constructor(private slot: ConnectionSlot, private token: number) {
+
+	}
+
+	public unlock() {
+		return this.slot.unlock(this.token)
+	}
+
+	public heartbeat() {
+		return this.slot.heartbeat()
+	}
+}
+
 export class HTTPClient {
 	public cookies = new CookieJar()
 
@@ -300,6 +361,9 @@ export class HTTPClient {
 	private socksagent?: http.Agent
 
 	public ratelimit?: RatelimitBucket
+
+	// watchdog, lastActivity, token
+	private connectionSlotsActivity: ConnectionSlot[] = []
 
 	constructor(
 		private connections = 8,
@@ -323,52 +387,46 @@ export class HTTPClient {
 
 			this.socksagent = agent
 		}
-	}
 
-	private waiters: any[] = []
-	private freeAlloc = this.connections
-
-	private alloc(): Promise<void> {
-		return new Promise((resolve) => {
-			if (this.freeAlloc > 0) {
-				this.freeAlloc--
-				resolve()
-			} else {
-				this.waiters.push(resolve)
-			}
-		})
-	}
-
-	private free() {
-		this.freeAlloc = Math.min(this.freeAlloc + 1, this.connections)
-
-		if (this.waiters.length != 0) {
-			this.waiters.splice(0, 1)[0]()
-			this.freeAlloc--
+		for (let i = 0; i < connections; i++) {
+			this.connectionSlotsActivity.push(new ConnectionSlot((slot) => this.onFree(slot), i))
 		}
 	}
 
-	private regenerateAt = Date.now()
+	private waiters: ((slot: ConnectionLock) => any)[] = []
+
+	private alloc(): Promise<ConnectionLock> {
+		return new Promise((resolve) => {
+			for (const slot of this.connectionSlotsActivity) {
+				const result = slot.lock()
+
+				if (result !== false) {
+					resolve(new ConnectionLock(slot, result))
+					return
+				}
+			}
+
+			this.waiters.push(resolve)
+		})
+	}
+
+	private onFree(slot: ConnectionSlot) {
+		if (this.waiters.length != 0) {
+			const resolve = this.waiters.splice(0, 1)[0]
+			const result = slot.lock()
+
+			if (result === false) {
+				throw new Error('HOW')
+			}
+
+			resolve(new ConnectionLock(slot, result))
+		}
+	}
 
 	private async handleRequest(value: BakedRequest) {
 		if (this.ratelimit != undefined) {
 			await this.ratelimit.wait()
 		}
-
-		let regenerateAmount = Math.floor((Date.now() - this.regenerateAt) / 10_000)
-
-		if (regenerateAmount > 0) {
-			// hack around weird bug when free never gets called
-			// and maybe also promise on request never returns????
-			this.regenerateAt += regenerateAmount * 10_000
-
-			while (this.freeAlloc < this.connections && regenerateAmount > 0) {
-				this.free()
-				regenerateAmount--
-			}
-		}
-
-		await this.alloc()
 
 		const buildCookie = this.cookies.build(value.url)
 
@@ -410,6 +468,8 @@ export class HTTPClient {
 			params.headers!['content-length'] = value.body.length
 		}
 
+		const lock = await this.alloc()
+
 		let finished = false
 		let lastActivity = Date.now()
 		let stream: http.IncomingMessage | undefined = undefined
@@ -426,11 +486,13 @@ export class HTTPClient {
 
 				clearInterval(timeoutID)
 				finished = true
-				value.reject('Too slow download stream')
 				stream?.destroy()
 
-				if (stream === undefined)
-					this.free()
+				if (stream === undefined) {
+					lock.unlock()
+				}
+
+				value.reject('Too slow download stream')
 			}
 		}, 1000)
 
@@ -460,10 +522,12 @@ export class HTTPClient {
 							value.url = new urlModule.URL(response.headers.location)
 						}
 					} catch(err) {
+						lock.unlock()
 						value.reject(new HTTPError(response.statusCode, String(err), 'Location URL is invalid: ' + response.headers.location))
-						this.free()
 						return
 					}
+
+					lock.unlock()
 
 					value.https = value.url.protocol == 'https:'
 					value.agent = value.url.protocol == 'https:' ? this.httpsagent : this.httpagent
@@ -472,13 +536,13 @@ export class HTTPClient {
 					clearInterval(timeoutID)
 					response.destroy()
 				} else {
-					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
+					lock.unlock()
 					clearInterval(timeoutID)
 					finished = true
 					response.destroy()
+					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
 				}
 
-				this.free()
 				return
 			}
 
@@ -490,6 +554,7 @@ export class HTTPClient {
 
 			response.on('data', (chunk: Buffer) => {
 				lastActivity = Date.now()
+				lock.heartbeat()
 				memcache.push(chunk)
 			})
 
@@ -499,14 +564,14 @@ export class HTTPClient {
 				}
 
 				console.error(`Throw INNER ${err} on ${value.traceback}`)
-				this.free()
-				value.reject(err)
+				lock.unlock()
 				clearInterval(timeoutID)
+				value.reject(err)
 			})
 
 			response.on('end', async () => {
 				clearInterval(timeoutID)
-				this.free()
+				lock.unlock()
 
 				let size = 0
 
@@ -563,8 +628,7 @@ export class HTTPClient {
 
 			finished = true
 			clearInterval(timeoutID)
-
-			this.free()
+			lock.unlock()
 
 			// accept two failures
 			if (value.requestFailures < 2) {
