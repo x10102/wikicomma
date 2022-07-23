@@ -714,6 +714,7 @@ export class WikiDot {
 				this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
 				this.fetchingToken = false
 				await this.fetchToken(true)
+				this.tokenInvalidated = false
 
 				for (const waiter of this.tokenWaiters) {
 					waiter()
