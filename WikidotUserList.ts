@@ -209,7 +209,7 @@ export class WikiDotUserList {
 				for (const [a, b] of this.usersToFetch) {
 					if (a != skipid) {
 						this.fetchOptional(a, b).catch((err) => {
-							process.stderr.write(`Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
+							process.stderr.write(`[Wikidot Userlist] Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
 						})
 					}
 				}
@@ -279,7 +279,7 @@ export class WikiDotUserList {
 				this.wantsToWritePending()
 			}
 
-			process.stdout.write(`Trying to fetch wikidot user ${username}<${id}>\n`)
+			process.stdout.write(`[Wikidot Userlist] Trying to fetch wikidot user ${username}<${id}>\n`)
 
 			const body = (await this.client.get(path, {headers: {
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
@@ -369,7 +369,7 @@ export class WikiDotUserList {
 
 			await this.write(id, data)
 
-			process.stdout.write(`Fetched wikidot user ${username}<${id}>\n`)
+			process.stdout.write(`[Wikidot Userlist] Fetched wikidot user ${username}<${id}>\n`)
 
 			for (const fn of waiting_room.resolve) {
 				try {

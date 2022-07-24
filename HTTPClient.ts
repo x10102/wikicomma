@@ -319,7 +319,7 @@ class ConnectionSlot {
 		this.timer = undefined
 
 		if (force)
-			process.stderr.write(`Waiting for request to finish for way too long, freeing up connection slot! This happened ${++this.lockups} times on slot ${this.slotID}\n`)
+			process.stderr.write(`[HTTP Client] Waiting for request to finish for way too long, freeing up connection slot! This happened ${++this.lockups} times on slot ${this.slotID}\n`)
 
 			this.callback(this)
 	}
