@@ -578,6 +578,7 @@ export class HTTPClient {
 			response.on('end', async () => {
 				clearInterval(timeoutID)
 				lock.unlock()
+				finished = true
 
 				let size = 0
 
@@ -599,19 +600,22 @@ export class HTTPClient {
 				// mark buffers as dead for gc
 				memcache = []
 
-				switch (response.headers['content-encoding']) {
-					case 'br':
-						newbuff = await pbrotliDecompress(newbuff)
-						break
-					case 'gzip':
-						newbuff = await punzip(newbuff)
-						break
-					case 'deflate':
-						newbuff = await pinflate(newbuff)
-						break
+				try {
+					switch (response.headers['content-encoding']) {
+						case 'br':
+							newbuff = await pbrotliDecompress(newbuff)
+							break
+						case 'gzip':
+							newbuff = await punzip(newbuff)
+							break
+						case 'deflate':
+							newbuff = await pinflate(newbuff)
+							break
+					}
+				} catch(err) {
+					value.reject(err)
+					return
 				}
-
-				finished = true
 
 				if (response.statusCode == 200 || response.statusCode == 206) {
 					value.resolve(newbuff)
