@@ -306,19 +306,22 @@ class ConnectionSlot {
 
 		this.timer = setInterval(() => {
 			if (this.lastActivity + 10_000 < Date.now()) {
-				this._unlock()
+				this._unlock(true)
 			}
 		}, 1_000)
 
 		return ++this.token
 	}
 
-	private _unlock() {
+	private _unlock(force = false) {
 		clearInterval(this.timer!)
 		this.lastActivity = Date.now()
 		this.timer = undefined
-		process.stderr.write(`Waiting for request to finish for way too long, freeing up connection slot! This happened ${++this.lockups} times on slot ${this.slotID}\n`)
-		this.callback(this)
+
+		if (force)
+			process.stderr.write(`Waiting for request to finish for way too long, freeing up connection slot! This happened ${++this.lockups} times on slot ${this.slotID}\n`)
+
+			this.callback(this)
 	}
 
 	public unlock(token: number) {
