@@ -282,6 +282,20 @@ export class CookieJar {
 
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
+class ConnectionLock {
+	constructor(private slot: ConnectionSlot, private token: number) {
+
+	}
+
+	public unlock() {
+		return this.slot.unlock(this.token)
+	}
+
+	public heartbeat() {
+		return this.slot.heartbeat(this.token)
+	}
+}
+
 class ConnectionSlot {
 	private timer?: NodeJS.Timer
 	private token = -1
@@ -310,7 +324,7 @@ class ConnectionSlot {
 			}
 		}, 1_000)
 
-		return ++this.token
+		return new ConnectionLock(this, ++this.token)
 	}
 
 	private _unlock(force = false) {
@@ -332,20 +346,6 @@ class ConnectionSlot {
 		this._unlock()
 
 		return true
-	}
-}
-
-class ConnectionLock {
-	constructor(private slot: ConnectionSlot, private token: number) {
-
-	}
-
-	public unlock() {
-		return this.slot.unlock(this.token)
-	}
-
-	public heartbeat() {
-		return this.slot.heartbeat(this.token)
 	}
 }
 
@@ -407,7 +407,7 @@ export class HTTPClient {
 				const result = slot.lock()
 
 				if (result !== false) {
-					resolve(new ConnectionLock(slot, result))
+					resolve(result)
 					return
 				}
 			}
@@ -425,7 +425,7 @@ export class HTTPClient {
 				throw new Error('HOW')
 			}
 
-			resolve(new ConnectionLock(slot, result))
+			resolve(result)
 		}
 	}
 
