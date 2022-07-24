@@ -1945,7 +1945,7 @@ export class WikiDot {
 											this.log(`File ${emeta.file_id} <${emeta.url}> inside ${pageName} <${pageMeta.page_id}> got removed`)
 											await promises.unlink(`${this.workingDirectory}/files/${pageName}/${emeta.file_id}`)
 										} catch(err) {
-
+											this.error(String(err))
 										}
 									}
 								}
