@@ -2799,14 +2799,7 @@ export class WikiDot {
 			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
 			await promises.rm(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
-			// this.error(String(err))
-		}
-
-		try {
-			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
-			await promises.rm(`${this.workingDirectory}/files/${WikiDot.normalizeName(page)}`, {recursive: true})
-		} catch(err) {
-			// this.error(String(err))
+			this.error(String(err))
 		}
 	}
 
