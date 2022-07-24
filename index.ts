@@ -56,9 +56,9 @@ interface DaemonConfig {
 		process.exit(1)
 	}
 
-	function makeClient() {
+	function makeClient(connectionLimit: number) {
 		const client = new HTTPClient(
-			3,
+			connectionLimit,
 			config.http_proxy?.address,
 			config.http_proxy?.port,
 			config.socks_proxy?.address,
@@ -75,7 +75,7 @@ interface DaemonConfig {
 
 	const tasks: any[] = []
 	const lock = new Lock()
-	const userList = new WikiDotUserList(config.base_directory + '/_users', makeClient(), config.user_list_cache_freshness !== undefined ? config.user_list_cache_freshness * 1000 : undefined)
+	const userList = new WikiDotUserList(config.base_directory + '/_users', makeClient(3), config.user_list_cache_freshness !== undefined ? config.user_list_cache_freshness * 1000 : undefined)
 
 	await userList.initialize()
 
@@ -86,7 +86,7 @@ interface DaemonConfig {
 					url = url.substring(0, url.length - 1)
 				}
 
-				const client = makeClient()
+				const client = makeClient(8)
 
 				try {
 					const wiki = new WikiDot(
