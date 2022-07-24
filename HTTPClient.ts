@@ -293,8 +293,10 @@ class ConnectionSlot {
 
 	}
 
-	public heartbeat() {
-		this.lastActivity = Date.now()
+	public heartbeat(token: number) {
+		if (this.token == token) {
+			this.lastActivity = Date.now()
+		}
 	}
 
 	public lock() {
@@ -340,7 +342,7 @@ class ConnectionLock {
 	}
 
 	public heartbeat() {
-		return this.slot.heartbeat()
+		return this.slot.heartbeat(this.token)
 	}
 }
 
