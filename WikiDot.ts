@@ -2782,22 +2782,25 @@ export class WikiDot {
 
 	public async markPageRemoved(page: string) {
 		try {
-			// await promises.rename(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, `${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.${Date.now()}.json`)
 			await promises.unlink(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}.7z`)
 			await promises.unlink(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			// await promises.rename(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, `${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.${Date.now()}`)
 			await promises.rm(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+		} catch(err) {
+			this.error(String(err))
+		}
+
+		try {
+			await promises.rm(`${this.workingDirectory}/files/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
 			this.error(String(err))
 		}
