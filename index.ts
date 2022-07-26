@@ -33,7 +33,7 @@ import { loadConfig } from './DaemonConfig'
 
 	const tasks: any[] = []
 	const lock = new Lock()
-	const userList = new WikiDotUserList(config.base_directory + '/_users', config.makeClient(3), config.user_list_cache_freshness !== undefined ? config.user_list_cache_freshness * 1000 : undefined)
+	const userList = config.makeUserList()
 
 	await userList.initialize()
 

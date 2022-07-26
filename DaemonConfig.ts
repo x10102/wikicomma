@@ -80,8 +80,8 @@ export class DaemonConfig implements IDaemonConfig {
 		return client
 	}
 
-	public makeUserList() {
-		return new WikiDotUserList(this.base_directory + '/_users', this.makeClient(3), this.user_list_cache_freshness !== undefined ? this.user_list_cache_freshness * 1000 : undefined)
+	public makeUserList(connectionLimit = 8) {
+		return new WikiDotUserList(this.base_directory + '/_users', this.makeClient(connectionLimit), this.user_list_cache_freshness !== undefined ? this.user_list_cache_freshness * 1000 : undefined)
 	}
 }
 
