@@ -1866,10 +1866,13 @@ export class WikiDot {
 			}
 		}
 
-		await fetchSiteMap(`${this.url}/sitemap.xml`)
+		try {
+			await fetchSiteMap(`${this.url}/sitemap.xml`)
+		} finally {
+			lock.release()
+		}
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
-		lock.release()
 
 		const oldMap = await this.loadSiteMap()
 
