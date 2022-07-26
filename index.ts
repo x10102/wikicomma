@@ -73,4 +73,6 @@ import { loadConfig } from './DaemonConfig'
 	} finally {
 		userList.client.ratelimit?.stopTimer()
 	}
+
+	process.exit(0)
 })()
