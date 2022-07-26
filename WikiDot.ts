@@ -486,7 +486,7 @@ export class WikiDot {
 		const [a, b] = WikiDot.extractUser(elem)
 
 		if (a !== null && b !== null) {
-			this.userList.fetchOptional(a, b).catch((err) => {
+			this.userList?.fetchOptional(a, b).catch((err) => {
 				this.error(`Caught an error while trying to fetch user ${b}<${a}>`)
 				this.error(err)
 			})
@@ -611,7 +611,7 @@ export class WikiDot {
 		private workingDirectory: string = `./storage/${name}`,
 		public client: HTTPClient | null,
 		public queue: PromiseQueue | null,
-		public userList: WikiDotUserList,
+		public userList: WikiDotUserList | null,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)

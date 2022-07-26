@@ -147,4 +147,6 @@ import { parallel } from "./worker"
 	}
 
 	userList?.client.ratelimit?.stopTimer()
+
+	process.exit(0)
 })()
