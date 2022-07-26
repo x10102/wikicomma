@@ -26,6 +26,7 @@ import { WikiDotUserList } from "./WikidotUserList"
 // OTHER DEALINGS IN THE SOFTWARE.
 
 import {promises} from 'fs'
+import { PromiseQueue } from "./worker"
 
 export interface IDaemonConfig {
 	base_directory: string
@@ -82,6 +83,10 @@ export class DaemonConfig implements IDaemonConfig {
 
 	public makeUserList(connectionLimit = 8) {
 		return new WikiDotUserList(this.base_directory + '/_users', this.makeClient(connectionLimit), this.user_list_cache_freshness !== undefined ? this.user_list_cache_freshness * 1000 : undefined)
+	}
+
+	public makeQueue() {
+		return new PromiseQueue(this.delay_ms, this.maximum_jobs)
 	}
 }
 

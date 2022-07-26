@@ -52,7 +52,7 @@ import { loadConfig } from './DaemonConfig'
 						url,
 						`${config.base_directory}/${name}`,
 						client,
-						new PromiseQueue(config.delay_ms, config.maximum_jobs),
+						config.makeQueue(),
 						userList
 					)
 

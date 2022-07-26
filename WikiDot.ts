@@ -50,7 +50,7 @@ export interface PageRevision {
 	commentary?: string
 }
 
-function findMostRevision(list: PageRevision[]) {
+export function findMostRevision(list: PageRevision[]) {
 	if (list.length == 0) {
 		return null
 	}
@@ -617,6 +617,12 @@ export class WikiDot {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
 
+		if (client !== null && queue === null) {
+			throw new Error(`HTTPClient is specified, but not queue`)
+		} else if (client === null && queue !== null) {
+			throw new Error(`HTTPClient is not specified, but queue is`)
+		}
+
 		if (handleCookies && this.client !== null) {
 			let savingCookies = false
 			let timeoutPlaced = false
@@ -681,6 +687,8 @@ export class WikiDot {
 		if (this.client === null) {
 			throw new Error(`This object is in offline mode`)
 		}
+
+		await this.initialize()
 
 		let cookie = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
 
@@ -839,15 +847,24 @@ export class WikiDot {
 
 	private static dateMatcher = /time_([0-9]+)/
 
-	public async fetchPageChangeListForce(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
-		while (true) {
+	public async fetchPageChangeListForce(page_id: number, page = 1, perPage = WikiDot.defaultPagenation, attempts = -1) {
+		let iteration = 0
+
+		while (attempts < 0 || ++iteration <= attempts) {
 			try {
 				return await this.fetchPageChangeList(page_id, page, perPage)
 			} catch(err) {
-				this.error(`Encountered ${err} when fetching changes of ${page_id} offset ${page}, sleeping for 5 seconds`)
+				if (attempts >= 0) {
+					this.error(`Encountered ${err} when fetching changes of ${page_id} offset ${page}, sleeping for 5 seconds (attempt ${iteration}/${attempts})`)
+				} else {
+					this.error(`Encountered ${err} when fetching changes of ${page_id} offset ${page}, sleeping for 5 seconds`)
+				}
+
 				await sleep(5_000)
 			}
 		}
+
+		return null
 	}
 
 	public async fetchPageChangeList(page_id: number, page = 1, perPage = WikiDot.defaultPagenation) {
@@ -934,13 +951,19 @@ export class WikiDot {
 		return listing
 	}
 
-	public async fetchPageChangeListAllForce(page_id: number) {
+	public async fetchPageChangeListAllForce(page_id: number, attempts = -1) {
 		const listing: PageRevision[] = []
 		let page = 0
 
 		while (true) {
 			this.log(`Fetching changeset offset ${page} of ${page_id}`)
-			const data = await this.fetchPageChangeListForce(page_id, ++page)
+
+			const data = await this.fetchPageChangeListForce(page_id, ++page, WikiDot.defaultPagenation, attempts)
+
+			if (data === null) {
+				return null
+			}
+
 			listing.push(...data)
 
 			//if (data.length < WikiDot.defaultPagenation) {
@@ -979,13 +1002,18 @@ export class WikiDot {
 		return listing
 	}
 
-	public async fetchPageChangeListAllUntilForce(page_id: number, revision: number) {
+	public async fetchPageChangeListAllUntilForce(page_id: number, revision: number, attempts = -1) {
 		const listing: PageRevision[] = []
 		let page = 0
 
 		while (true) {
 			this.log(`Fetching changeset offset ${page} of ${page_id}`)
-			const data = await this.fetchPageChangeListForce(page_id, ++page)
+			const data = await this.fetchPageChangeListForce(page_id, ++page, WikiDot.defaultPagenation, attempts)
+
+			if (data === null) {
+				return null
+			}
+
 			let finish = false
 
 			for (const piece of data) {
@@ -1013,6 +1041,8 @@ export class WikiDot {
 		if (this.client === null) {
 			throw new Error(`This object is in offline mode`)
 		}
+
+		await this.initialize()
 
 		const result = await this.client.get(`${this.url}/${page}/noredirect/true?_ts=${Date.now()}`, {
 			followRedirects: false,
@@ -2009,7 +2039,7 @@ export class WikiDot {
 
 						const lastRevision = findMostRevision(newMeta.revisions)
 						const changes = lastRevision == null ? await this.fetchPageChangeListAllForce(pageMeta.page_id) : await this.fetchPageChangeListAllUntilForce(pageMeta.page_id, lastRevision)
-						newMeta.revisions.unshift(...changes)
+						newMeta.revisions.unshift(...changes!)
 						await this.writePageMetadata(pageName, newMeta)
 						metadata = newMeta
 					}

@@ -85,6 +85,10 @@ function indexOf2(list: UserFetchList, value: string): number {
 	return -1
 }
 
+class UserNotFoundError extends Error {
+
+}
+
 export class WikiDotUserList {
 	constructor(
 		public workFolder: string,
@@ -305,7 +309,11 @@ export class WikiDotUserList {
 				for (const [a, b] of this.usersToFetch) {
 					if (a !== skipid && b !== skipid) {
 						this.fetchOptional(a, b).catch((err) => {
-							process.stderr.write(`[WikiDot Userlist] Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
+							if (!(err instanceof UserNotFoundError)) {
+								process.stderr.write(`[WikiDot Userlist] Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
+							} else {
+								process.stderr.write(`[WikiDot Userlist] User ${b} <${a}> does not exist.\n`)
+							}
 						})
 					}
 				}
@@ -322,6 +330,12 @@ export class WikiDotUserList {
 		const div1 = html.querySelector('div.col-md-9')
 
 		if (div1 == null) {
+			const error_block = html.querySelector('div.error-block')
+
+			if (error_block?.textContent.toLowerCase() == 'user does not exist.') {
+				throw new UserNotFoundError(`User ${username} does not exist`)
+			}
+
 			throw new Error('div.col-md-9 is missing')
 		}
 
@@ -547,6 +561,16 @@ export class WikiDotUserList {
 			}
 
 			this.failures.set(username, err)
+
+			if (err instanceof UserNotFoundError) {
+				const index = id !== null ? indexOf(this.usersToFetch, id) : indexOf2(this.usersToFetch, username)
+
+				if (index >= 0) {
+					this.usersToFetch.splice(index, 1)
+					this.wantsToWritePending()
+				}
+			}
+
 			throw err
 		} finally {
 			this.processing.delete(username)
