@@ -1600,13 +1600,14 @@ export class WikiDot {
 
 		this.log(`Fetching file ${fileMeta.url}`)
 
+		this.pushPendingFiles(fileMeta.file_id)
+
 		await this.client.get(fileMeta.url, config).then(async buffer => {
 			await promises.mkdir(`${this.workingDirectory}/files/${pageName}`, {recursive: true})
 			await promises.writeFile(`${this.workingDirectory}/files/${pageName}/${fileMeta.file_id}`, buffer)
 			this.removePendingFiles(fileMeta.file_id)
 		}).catch(err => {
 			this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
-			this.pushPendingFiles(fileMeta.file_id)
 		})
 	}
 
