@@ -24,7 +24,7 @@ import { HTTPClient } from "./HTTPClient"
 // OTHER DEALINGS IN THE SOFTWARE.
 
 import {promises} from 'fs'
-import parse from "node-html-parser"
+import parse, { HTMLElement } from "node-html-parser"
 
 export enum UserActivity {
 	NONE,
@@ -40,7 +40,7 @@ export interface User {
 	full_name: string
 	username: string
 
-	real_name: string
+	real_name?: string
 	gender?: boolean
 	birthday?: number
 	from?: string
@@ -50,10 +50,12 @@ export interface User {
 	bio?: string
 
 	// who even buy this
-	account_type: string
-	activity: UserActivity
+	account_type?: string
+	activity?: UserActivity
 
 	fetched_at: number
+
+	user_id: number
 }
 
 interface WaitingRoom {
@@ -61,9 +63,21 @@ interface WaitingRoom {
 	reject: ((error: any) => void)[]
 }
 
-function indexOf(list: [number, string][], value: number): number {
+type UserFetchList = [number | null, string][]
+
+function indexOf(list: UserFetchList, value: number): number {
 	for (const i in list) {
 		if (list[i][0] == value) {
+			return Number(i)
+		}
+	}
+
+	return -1
+}
+
+function indexOf2(list: UserFetchList, value: string): number {
+	for (const i in list) {
+		if (list[i][1] == value) {
 			return Number(i)
 		}
 	}
@@ -86,7 +100,7 @@ export class WikiDotUserList {
 
 	private fetchedOnce = false
 
-	private usersToFetch: [number, string][] = []
+	private usersToFetch: UserFetchList = []
 
 	private static gender_1 = /^male/i
 
@@ -124,14 +138,25 @@ export class WikiDotUserList {
 	private fetched = new Map<string, boolean>()
 	private processing = new Map<string, WaitingRoom>()
 
-	public async fetch(id: number, username: string): Promise<User> {
-		const fetched = await this.fetchOptional(id, username)
+	public async fetch(id: number, username: string, refresh = true): Promise<User> {
+		const fetched = await this.fetchOptional(id, username, refresh)
 
 		if (fetched !== null) {
 			return fetched
 		}
 
 		return (await this.read(id))!
+	}
+
+	public async fetchByUsername(username: string, refresh = true): Promise<User> {
+		const fetched = await this.fetchOptional(null, username, refresh)
+
+		if (fetched !== null) {
+			return fetched
+		}
+
+		const [mapping] = await this.loadMapping()
+		return mapping.get(username)!
 	}
 
 	private async write(id: number, data: User) {
@@ -148,9 +173,23 @@ export class WikiDotUserList {
 		list[id] = data
 		const bucket = id >> WikiDotUserList.bucketSize
 		await promises.writeFile(`${this.workFolder}/${bucket}.json`, JSON.stringify(list, null, 4))
+
+		if (this.storedInMemory) {
+			this.mapping.set(data.username, data)
+			this.invMapping.set(id, data)
+		}
 	}
 
 	public async read(id: number): Promise<User | null> {
+		if (this.loadingMapping) {
+			await new Promise((resolve) => this.loadingWaiters.push(resolve))
+		}
+
+		if (this.storedInMemory) {
+			const read = this.invMapping.get(id)
+			return read ?? null
+		}
+
 		const read = await this.readBucket(id)
 
 		if (read === null) {
@@ -159,7 +198,7 @@ export class WikiDotUserList {
 
 		const user = read[id]
 
-		if (user === undefined) {
+		if (user === undefined || user.user_id === undefined) {
 			return null
 		}
 
@@ -174,6 +213,63 @@ export class WikiDotUserList {
 		} catch(err) {
 			return null
 		}
+	}
+
+	private storedInMemory = false
+	private loadingMapping = false
+	private loadingWaiters: any[] = []
+	private mapping = new Map<string, User>()
+	private invMapping = new Map<number, User>()
+
+	public async loadMapping(): Promise<[Map<string, User>, Map<number, User>]> {
+		if (this.storedInMemory) {
+			return [this.mapping, this.invMapping]
+		}
+
+		if (this.loadingMapping) {
+			await new Promise((resolve) => this.loadingWaiters.push(resolve))
+			return [this.mapping, this.invMapping]
+		} else {
+			this.loadingMapping = true
+		}
+
+		for (const name of (await promises.readdir(this.workFolder))) {
+			if (name.match(/^[0-9]+\.json$/)) {
+				const list: {[key: string]: User} = JSON.parse(await promises.readFile(`${this.workFolder}/${name}`, {encoding: 'utf-8'}))
+				let changes = false
+
+				for (const id in list) {
+					this.mapping.set(list[id].username, list[id])
+					this.invMapping.set(parseInt(id), list[id])
+
+					if (list[id].user_id === undefined) {
+						list[id].user_id = parseInt(id)
+						changes = true
+					}
+				}
+
+				if (changes) {
+					process.stderr.write(`[WikiDot Userlist] Fixing up ${this.workFolder}/${name}\n`)
+					await promises.writeFile(`${this.workFolder}/${name}`, JSON.stringify(list, null, 4))
+				}
+			}
+		}
+
+		this.loadingMapping = false
+		this.storedInMemory = true
+
+		for (const waiter of this.loadingWaiters) {
+			waiter()
+		}
+
+		this.loadingWaiters = []
+
+		return [this.mapping, this.invMapping]
+	}
+
+	public async getByUsername(username: string) {
+		const [mapping] = await this.loadMapping()
+		return mapping.get(username) ?? null
 	}
 
 	private wantToWritePrending = false
@@ -198,7 +294,7 @@ export class WikiDotUserList {
 		}
 	}
 
-	public async initialize(skipid?: number) {
+	public async initialize(skipid?: number | string) {
 		if (!this.fetchedOnce) {
 			await promises.mkdir(this.workFolder, {recursive: true})
 			this.fetchedOnce = true
@@ -207,9 +303,9 @@ export class WikiDotUserList {
 				this.usersToFetch = JSON.parse(await promises.readFile(`${this.workFolder}/pending.json`, {encoding: 'utf-8'}))
 
 				for (const [a, b] of this.usersToFetch) {
-					if (a != skipid) {
+					if (a !== skipid && b !== skipid) {
 						this.fetchOptional(a, b).catch((err) => {
-							process.stderr.write(`[Wikidot Userlist] Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
+							process.stderr.write(`[WikiDot Userlist] Error while late fecthing user ${b} <${a}>: ${err}\nWill try to fetch later\n`)
 						})
 					}
 				}
@@ -219,11 +315,153 @@ export class WikiDotUserList {
 		}
 	}
 
-	public async fetchOptional(id: number, username: string): Promise<User | null> {
-		await this.initialize(id)
+	private static matchAgainstUserIDA = /^WIKIDOT\.modules\.UserInfoModule\.listeners\.addContact\(event,([0-9]+)\)$/i
+	private static matchAgainstUserIDB = /^WIKIDOT\.modules\.UserInfoModule\.listeners\.flagUser\(event,([0-9]+)\)$/i
+
+	private parseBody(html: HTMLElement, username: string) {
+		const div1 = html.querySelector('div.col-md-9')
+
+		if (div1 == null) {
+			throw new Error('div.col-md-9 is missing')
+		}
+
+		const title = div1.querySelector('h1.profile-title')
+		const info = div1.querySelector('dl.dl-horizontal')
+
+		if (title == null) {
+			throw new Error('div.profile-title is missing')
+		}
+
+		if (info == null) {
+			throw new Error('dl.dl-horizontal is missing')
+		}
+
+		const dt = info.querySelectorAll('dt')
+		const dd = info.querySelectorAll('dd')
+
+		if (dt.length != dd.length) {
+			throw new Error(`dt and dd arrays length do not match: ${dt.length} != ${dd.length}`)
+		}
+
+		const matched_against: {[key: string]: string} = {}
+
+		for (let i = 0; i < dt.length; i++) {
+			const key = dt[i].textContent
+			const value = dd[i].textContent
+
+			for (const name in WikiDotUserList.matchers) {
+				const matcher = (WikiDotUserList.matchers as {[key: string]: RegExp})[name]
+
+				if (key.match(matcher) !== null) {
+					matched_against[name] = value.trim()
+				}
+			}
+		}
+
+		let gender: boolean | undefined = undefined
+
+		if (matched_against.gender !== undefined) {
+			gender = matched_against.gender.match(WikiDotUserList.gender_1) !== null ? WikiDotUserList.GENDER_MALE : WikiDotUserList.GENDER_FEMALE
+		}
+
+		let birthday: number | undefined = undefined
+
+		if (matched_against.birthday !== undefined) {
+			birthday = new Date(matched_against.birthday).getTime()
+		}
+
+		if (matched_against.wikidot_user_since === undefined) {
+			throw new Error('matched_against.wikidot_user_since is missing')
+		}
+
+		let activity = UserActivity.UNKNOWN
+
+		if (matched_against.activity !== undefined) {
+			for (const key in WikiDotUserList.activity_levels) {
+				if (matched_against.activity.match((WikiDotUserList.activity_levels as {[key: string]: RegExp})[key]) !== null) {
+					activity = UserActivity[key]
+					break
+				}
+			}
+		}
+
+		let userID: number | undefined = undefined
+
+		for (const elem of div1.querySelectorAll('a')) {
+			if (elem.attrs.onclick) {
+				const matchedAgainst = elem.attrs.onclick.match(WikiDotUserList.matchAgainstUserIDA) ?? elem.attrs.onclick.match(WikiDotUserList.matchAgainstUserIDB)
+
+				if (matchedAgainst !== null) {
+					userID = parseInt(matchedAgainst[1])
+					break
+				}
+			}
+		}
+
+		if (userID === undefined) {
+			throw new Error(`Can't determine user id for ${username}`)
+		}
+
+		const data: User = {
+			full_name: title.textContent.trim(),
+			username: username,
+			real_name: matched_against.real_name,
+			gender: gender,
+			birthday: birthday,
+			from: matched_against.from,
+			website: matched_against.website,
+			wikidot_user_since: new Date(matched_against.wikidot_user_since).getTime() / 1000,
+			bio: matched_against.bio,
+			account_type: matched_against.account_type,
+			activity: activity,
+			fetched_at: Date.now(),
+			user_id: userID
+		}
+
+		return data
+	}
+
+	public pushPending(id: number | null, username: string) {
+		if (id === null) {
+			if (indexOf2(this.usersToFetch, username) == -1) {
+				this.usersToFetch.push([null, username])
+				this.wantsToWritePending()
+				return true
+			}
+		} else {
+			if (indexOf(this.usersToFetch, id) == -1) {
+				this.usersToFetch.push([id, username])
+				this.wantsToWritePending()
+				return true
+			}
+		}
+
+		return false
+	}
+
+	private failures = new Map<string, any>()
+
+	public async fetchOptional(id: number | null, username: string, refresh = true): Promise<User | null> {
+		await this.initialize(id ?? username)
 
 		if (this.fetched.has(username)) {
 			return null
+		}
+
+		if (this.loadingMapping) {
+			await new Promise((resolve) => this.loadingWaiters.push(resolve))
+		}
+
+		if (this.storedInMemory) {
+			const fetchExisting = await this.getByUsername(username)
+
+			if (fetchExisting !== null && (!refresh || fetchExisting.fetched_at + this.cacheValidFor >= Date.now())) {
+				return fetchExisting
+			}
+		}
+
+		if (this.failures.has(username)) {
+			throw this.failures.get(username)!
 		}
 
 		let waiting_room = this.processing.get(username)
@@ -240,33 +478,35 @@ export class WikiDotUserList {
 		this.processing.set(username, waiting_room)
 
 		try {
-			const fetchExisting = await this.read(id)
+			if (id !== null) {
+				const fetchExisting = await this.read(id)
 
-			if (fetchExisting !== null && fetchExisting.fetched_at + this.cacheValidFor >= Date.now()) {
-				this.fetched.set(username, true)
+				if (fetchExisting !== null && (!refresh || fetchExisting.fetched_at + this.cacheValidFor >= Date.now())) {
+					this.fetched.set(username, true)
 
-				for (const fn of waiting_room.resolve) {
-					try {
-						fn(fetchExisting)
-					} catch(err) {
-						// big gulp
+					for (const fn of waiting_room.resolve) {
+						try {
+							fn(fetchExisting)
+						} catch(err) {
+							// big gulp
+						}
 					}
+
+					const index = indexOf(this.usersToFetch, id)
+
+					if (index >= 0) {
+						this.usersToFetch.splice(index, 1)
+						this.wantsToWritePending()
+					}
+
+					return fetchExisting
 				}
-
-				const index = indexOf(this.usersToFetch, id)
-
-				if (index >= 0) {
-					this.usersToFetch.splice(index, 1)
-					this.wantsToWritePending()
-				}
-
-				return fetchExisting
 			}
 
 			const path = `https://www.wikidot.com/user:info/${username}`
 
 			waiting_room.resolve.push((_) => {
-				const index = indexOf(this.usersToFetch, id)
+				const index = id !== null ? indexOf(this.usersToFetch, id) : indexOf2(this.usersToFetch, username)
 
 				if (index >= 0) {
 					this.usersToFetch.splice(index, 1)
@@ -274,102 +514,21 @@ export class WikiDotUserList {
 				}
 			})
 
-			if (indexOf(this.usersToFetch, id) == -1) {
+			if ((id !== null ? indexOf(this.usersToFetch, id) : indexOf2(this.usersToFetch, username)) == -1) {
 				this.usersToFetch.push([id, username])
 				this.wantsToWritePending()
 			}
 
-			process.stdout.write(`[Wikidot Userlist] Trying to fetch wikidot user ${username}<${id}>\n`)
+			process.stdout.write(`[WikiDot Userlist] Trying to fetch wikidot user ${username}<${id ?? '???'}>\n`)
 
 			const body = (await this.client.get(path, {headers: {
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0'
 			}})).toString('utf-8')
 
-			const html = parse(body)
-			const div1 = html.querySelector('div.col-md-9')
+			const data = this.parseBody(parse(body), username)
+			await this.write(id ?? data.user_id, data)
 
-			if (div1 == null) {
-				throw new Error('div.col-md-9 is missing')
-			}
-
-			const title = div1.querySelector('h1.profile-title')
-			const info = div1.querySelector('dl.dl-horizontal')
-
-			if (title == null) {
-				throw new Error('div.profile-title is missing')
-			}
-
-			if (info == null) {
-				throw new Error('dl.dl-horizontal is missing')
-			}
-
-			const dt = info.querySelectorAll('dt')
-			const dd = info.querySelectorAll('dd')
-
-			if (dt.length != dd.length) {
-				throw new Error(`dt and dd arrays length do not match: ${dt.length} != ${dd.length}`)
-			}
-
-			const matched_against: {[key: string]: string} = {}
-
-			for (let i = 0; i < dt.length; i++) {
-				const key = dt[i].textContent
-				const value = dd[i].textContent
-
-				for (const name in WikiDotUserList.matchers) {
-					const matcher = (WikiDotUserList.matchers as {[key: string]: RegExp})[name]
-
-					if (key.match(matcher) !== null) {
-						matched_against[name] = value.trim()
-					}
-				}
-			}
-
-			let gender: boolean | undefined = undefined
-
-			if (matched_against.gender !== undefined) {
-				gender = matched_against.gender.match(WikiDotUserList.gender_1) !== null ? WikiDotUserList.GENDER_MALE : WikiDotUserList.GENDER_FEMALE
-			}
-
-			let birthday: number | undefined = undefined
-
-			if (matched_against.birthday !== undefined) {
-				birthday = new Date(matched_against.birthday).getTime()
-			}
-
-			if (matched_against.wikidot_user_since === undefined) {
-				throw new Error('matched_against.wikidot_user_since is missing')
-			}
-
-			let activity = UserActivity.UNKNOWN
-
-			if (matched_against.activity !== undefined) {
-				for (const key in WikiDotUserList.activity_levels) {
-					if (matched_against.activity.match((WikiDotUserList.activity_levels as {[key: string]: RegExp})[key]) !== null) {
-						activity = UserActivity[key]
-						break
-					}
-				}
-			}
-
-			const data: User = {
-				full_name: title.textContent.trim(),
-				username: username,
-				real_name: matched_against.real_name,
-				gender: gender,
-				birthday: birthday,
-				from: matched_against.from,
-				website: matched_against.website,
-				wikidot_user_since: new Date(matched_against.wikidot_user_since).getTime() / 1000,
-				bio: matched_against.bio,
-				account_type: matched_against.account_type,
-				activity: activity,
-				fetched_at: Date.now(),
-			}
-
-			await this.write(id, data)
-
-			process.stdout.write(`[Wikidot Userlist] Fetched wikidot user ${username}<${id}>\n`)
+			process.stdout.write(`[WikiDot Userlist] Fetched wikidot user ${username}<${id ?? data.user_id}>\n`)
 
 			for (const fn of waiting_room.resolve) {
 				try {
@@ -387,6 +546,7 @@ export class WikiDotUserList {
 				fn(err)
 			}
 
+			this.failures.set(username, err)
 			throw err
 		} finally {
 			this.processing.delete(username)

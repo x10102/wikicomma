@@ -35,13 +35,13 @@ const sleep = promisify(setTimeout)
 
 type UserID = number | null
 
-interface RecentChange {
+export interface RecentChange {
 	name: string
 	revision?: number
 	author: UserID
 }
 
-interface PageRevision {
+export interface PageRevision {
 	revision: number
 	global_revision: number
 	author: UserID
@@ -131,7 +131,7 @@ export function reencodeComponent(str: string) {
 	return str
 }
 
-function pushToSet<T>(set: T[], value: T) {
+export function pushToSet<T>(set: T[], value: T) {
 	if (!set.includes(value)) {
 		set.push(value)
 		return true
@@ -140,7 +140,7 @@ function pushToSet<T>(set: T[], value: T) {
 	return false
 }
 
-function removeFromSet<T>(set: T[], value: T) {
+export function removeFromSet<T>(set: T[], value: T) {
 	const indexOf = set.indexOf(value)
 
 	if (indexOf != -1) {
@@ -150,7 +150,7 @@ function removeFromSet<T>(set: T[], value: T) {
 	return indexOf != -1
 }
 
-function flipArray<T>(input: T[]): T[] {
+export function flipArray<T>(input: T[]): T[] {
 	let i = 0
 	let j = input.length - 1
 
@@ -212,7 +212,7 @@ export interface LocalPostRevision extends PostRevision {
 	title: string
 }
 
-function findPostRevision(list: LocalPostRevision[], id: number): LocalPostRevision | null {
+export function findPostRevision(list: LocalPostRevision[], id: number): LocalPostRevision | null {
 	for (const rev of list) {
 		if (rev.id == id) {
 			return rev
@@ -222,7 +222,7 @@ function findPostRevision(list: LocalPostRevision[], id: number): LocalPostRevis
 	return null
 }
 
-function findPost(list: LocalForumPost[], id: number): LocalForumPost | null {
+export function findPost(list: LocalForumPost[], id: number): LocalForumPost | null {
 	for (const rev of list) {
 		if (rev.id == id) {
 			return rev
@@ -564,6 +564,10 @@ export class WikiDot {
 	}
 
 	private async loadCookies() {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		try {
 			const read = await promises.readFile(`${this.workingDirectory}/http_cookies.json`, {encoding: 'utf-8'})
 			const json = JSON.parse(read)
@@ -574,20 +578,29 @@ export class WikiDot {
 	}
 
 	private async saveCookies() {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		await promises.mkdir(this.workingDirectory, {recursive: true})
 		const json = this.client.cookies.save()
 		await promises.writeFile(`${this.workingDirectory}/http_cookies.json`, JSON.stringify(json, null, 4))
 	}
 
 	private initialize() {
-		return Promise.allSettled([
-			this.loadCookies(),
+		const tasks = [
 			this.pendingFiles.initialize(),
 			this.pendingPages.initialize(),
 			this.fileMap.initialize(),
 			this.pendingRevisions.initialize(),
 			this.pageIdMap.initialize(),
-		])
+		]
+
+		if (this.client !== null) {
+			tasks.push(this.loadCookies())
+		}
+
+		return Promise.allSettled(tasks)
 	}
 
 	private ajaxURL: URL
@@ -596,15 +609,15 @@ export class WikiDot {
 		private name: string,
 		private url: string = `https://${name}.wikidot.com`,
 		private workingDirectory: string = `./storage/${name}`,
-		public client: HTTPClient,
-		public queue: PromiseQueue,
+		public client: HTTPClient | null,
+		public queue: PromiseQueue | null,
 		public userList: WikiDotUserList,
 		handleCookies = true
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
 
-		if (handleCookies) {
+		if (handleCookies && this.client !== null) {
 			let savingCookies = false
 			let timeoutPlaced = false
 
@@ -643,17 +656,18 @@ export class WikiDot {
 		process.stderr.write(`[${this.name}]: ${str}\n`)
 	}
 
-	private tokenFetchedAt = 0
-
 	public async fetchToken(force = false) {
 		if (this.fetchingToken) {
+			return
+		}
+
+		if (this.client === null) {
 			return
 		}
 
 		await this.initialize()
 
 		this.fetchingToken = true
-		this.tokenFetchedAt++
 
 		if (!force && this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value != undefined) {
 			return
@@ -664,6 +678,10 @@ export class WikiDot {
 	}
 
 	private async fetch(options: any, headers?: OutgoingHttpHeaders) {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		let cookie = this.client.cookies.getSpecific(this.ajaxURL, 'wikidot_token7')?.value
 
 		if (cookie == undefined) {
@@ -698,6 +716,10 @@ export class WikiDot {
 	private tokenWaiters: any[] = []
 
 	private async fetchJson(options: any, custom = false, headers?: OutgoingHttpHeaders): Promise<any> {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		if (this.tokenInvalidated) {
 			await new Promise((resolve) => this.tokenWaiters.push(resolve))
 		}
@@ -988,6 +1010,10 @@ export class WikiDot {
 	private static tagMatchRegExpB = /\/tag\/(\S+)$/i
 
 	public async fetchGeneric(page: string) {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		const result = await this.client.get(`${this.url}/${page}/noredirect/true?_ts=${Date.now()}`, {
 			followRedirects: false,
 			headers: {
@@ -1136,6 +1162,10 @@ export class WikiDot {
 	private static categoryRegExp = /forum\/c-([0-9]+)/
 
 	public async fetchForumCategories() {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		const listing: ForumCategory[] = []
 
 		const body = await this.client.get(`${this.url}/forum/start/hidden/show`)
@@ -1195,6 +1225,10 @@ export class WikiDot {
 	private static threadRegExp = /forum\/t-([0-9]+)/
 
 	public async fetchThreads(category: number, page = 1) {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		const listing: ForumThread[] = []
 
 		const body = await this.client.get(`${this.url}/forum/c-${category}/p/${page}`)
@@ -1530,6 +1564,10 @@ export class WikiDot {
 	}
 
 	private async fetchFileInner(fileMeta: {url: string, file_id: number}, pageName: string, config?: RequestConfig) {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		this.log(`Fetching file ${fileMeta.url}`)
 
 		await this.client.get(fileMeta.url, config).then(async buffer => {
@@ -1695,6 +1733,10 @@ export class WikiDot {
 	private static META_VERSION = 16
 
 	public async workLoop(lock: Lock) {
+		if (this.client === null || this.queue === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		await this.initialize()
 
 		{
@@ -1743,7 +1785,7 @@ export class WikiDot {
 		const sitemapPages: [string, Date | null][] = []
 
 		const fetchSiteMap = async (url: string) => {
-			const sitemap = (await this.client.get(url)).toString('utf-8')
+			const sitemap = (await this.client!.get(url)).toString('utf-8')
 			const xml = parse(sitemap)
 
 			for (const submap of xml.querySelectorAll('sitemap')) {
@@ -2006,7 +2048,7 @@ export class WikiDot {
 								const body = await this.fetchRevision(rev.global_revision)
 								await this.writeRevision(pageName, rev.revision, body)
 								changes = true
-								await this.queue.workerDelay()
+								await this.queue!.workerDelay()
 
 								if (rev.global_revision in this.pendingRevisions.data) {
 									delete this.pendingRevisions.data[rev.global_revision]
@@ -2023,7 +2065,7 @@ export class WikiDot {
 					}
 				}
 
-				await this.queue.run(worker, 8)
+				await this.queue!.run(worker, 8)
 
 				this.removePendingPages(pageName)
 				await this.writePageMetadata(pageName, metadata)

@@ -68,9 +68,9 @@ export function blockingQueue(tasks: (() => Promise<any>)[]) {
 }
 
 /**
- * Executes worker in parallel, returns only when all workers finish their work
+ * Executes worker in parallel, returns promise which returns only when all workers finish their work
  */
-export async function parallel<T>(worker: () => Promise<T>, desiredThreadCount: number) {
+export function parallel<T>(worker: () => Promise<T>, desiredThreadCount: number) {
 	// Produce and run jobs
 	const jobs = []
 
@@ -78,5 +78,22 @@ export async function parallel<T>(worker: () => Promise<T>, desiredThreadCount: 
 		jobs.push(worker())
 	}
 
-	return await Promise.all(jobs)
+	return Promise.all(jobs)
+}
+
+/**
+ * Executes tasks in parallel, returns promise which returns only when all workers finish their work
+ */
+ export function parallelQueue<T>(tasks: (() => Promise<T>)[], desiredThreadCount: number, errorHandler?: (err: any) => void) {
+	return parallel(async function() {
+		while (tasks.length != 0) {
+			try {
+				await tasks.pop()!()
+			} catch(err) {
+				if (errorHandler !== undefined) {
+					errorHandler(err)
+				}
+			}
+		}
+	}, desiredThreadCount)
 }
