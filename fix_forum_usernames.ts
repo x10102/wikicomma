@@ -193,10 +193,12 @@ import {promises} from 'fs'
 										if (post.id == fpost.id) {
 											if (typeof post.poster == 'string' && typeof fpost.poster == 'number') {
 												remapped.set(post.poster, fpost.poster)
+												process.stdout.write(`Remapping ${post.poster} to User ID ${fpost.poster}\n`)
 											}
 
 											if (typeof post.lastEditBy == 'string' && typeof fpost.lastEditBy == 'number') {
 												remapped.set(post.lastEditBy, fpost.lastEditBy)
+												process.stdout.write(`Remapping ${post.lastEditBy} to User ID ${fpost.lastEditBy}\n`)
 											}
 
 											post.poster = fpost.poster
