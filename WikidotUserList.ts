@@ -239,22 +239,27 @@ export class WikiDotUserList {
 
 		for (const name of (await promises.readdir(this.workFolder))) {
 			if (name.match(/^[0-9]+\.json$/)) {
-				const list: {[key: string]: User} = JSON.parse(await promises.readFile(`${this.workFolder}/${name}`, {encoding: 'utf-8'}))
-				let changes = false
+				try {
+					const list: {[key: string]: User} = JSON.parse(await promises.readFile(`${this.workFolder}/${name}`, {encoding: 'utf-8'}))
+					let changes = false
 
-				for (const id in list) {
-					this.mapping.set(list[id].username, list[id])
-					this.invMapping.set(parseInt(id), list[id])
+					for (const id in list) {
+						this.mapping.set(list[id].username, list[id])
+						this.invMapping.set(parseInt(id), list[id])
 
-					if (list[id].user_id === undefined) {
-						list[id].user_id = parseInt(id)
-						changes = true
+						if (list[id].user_id === undefined) {
+							list[id].user_id = parseInt(id)
+							changes = true
+						}
 					}
-				}
 
-				if (changes) {
-					process.stderr.write(`[WikiDot Userlist] Fixing up ${this.workFolder}/${name}\n`)
-					await promises.writeFile(`${this.workFolder}/${name}`, JSON.stringify(list, null, 4))
+					if (changes) {
+						process.stderr.write(`[WikiDot Userlist] Fixing up ${this.workFolder}/${name}\n`)
+						await promises.writeFile(`${this.workFolder}/${name}`, JSON.stringify(list, null, 4))
+					}
+				} catch(err) {
+					process.stderr.write(`Error reading ${this.workFolder}/${name}!\n`)
+					throw err
 				}
 			}
 		}

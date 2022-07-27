@@ -37,13 +37,9 @@ import { loadConfig } from './DaemonConfig'
 
 	await userList.initialize()
 
-	for (let {name, url} of config.wikis) {
+	for (const {name, url} of config.wikis) {
 		tasks.push(async function() {
 			try {
-				if (url.endsWith('/')) { // Some of wikidot parts don't like double slash
-					url = url.substring(0, url.length - 1)
-				}
-
 				const client = config.makeClient(8)
 
 				try {

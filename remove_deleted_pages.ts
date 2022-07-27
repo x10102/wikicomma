@@ -39,7 +39,7 @@ import {promises} from 'fs'
 			null
 		)
 
-		const sitemap = await wiki.loadSiteMap()
+		const sitemap = await wiki.readSiteMap()
 
 		if (sitemap !== null) {
 			process.stdout.write(`Scanning ${name}...\n`)

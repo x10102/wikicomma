@@ -499,11 +499,11 @@ export class WikiDot {
 	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
 	public static defaultPagenation = 100
 
-	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_files.json`)
-	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this.workingDirectory}/meta/pending_pages.json`)
-	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this.workingDirectory}/meta/file_map.json`)
-	private pageIdMap: DiskMeta<PageIdMap> = new DiskMeta({}, `${this.workingDirectory}/meta/page_id_map.json`)
-	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this.workingDirectory}/meta/pending_revisions.json`)
+	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_files.json`)
+	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_pages.json`)
+	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this._workingDirectory}/meta/file_map.json`)
+	private pageIdMap: DiskMeta<PageIdMap> = new DiskMeta({}, `${this._workingDirectory}/meta/page_id_map.json`)
+	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this._workingDirectory}/meta/pending_revisions.json`)
 
 	private pushPendingFiles(...files: number[]) {
 		for (const value of files) {
@@ -569,7 +569,7 @@ export class WikiDot {
 		}
 
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/http_cookies.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/http_cookies.json`, {encoding: 'utf-8'})
 			const json = JSON.parse(read)
 			this.client.cookies.load(json)
 		} catch(err) {
@@ -582,9 +582,9 @@ export class WikiDot {
 			throw new Error(`This object is in offline mode`)
 		}
 
-		await promises.mkdir(this.workingDirectory, {recursive: true})
+		await promises.mkdir(this._workingDirectory, {recursive: true})
 		const json = this.client.cookies.save()
-		await promises.writeFile(`${this.workingDirectory}/http_cookies.json`, JSON.stringify(json, null, 4))
+		await promises.writeFile(`${this._workingDirectory}/http_cookies.json`, JSON.stringify(json, null, 4))
 	}
 
 	private initialize() {
@@ -605,10 +605,14 @@ export class WikiDot {
 
 	private ajaxURL: URL
 
+	public get workingDirectory(): string {
+		return this._workingDirectory
+	}
+
 	constructor(
 		private name: string,
 		private url: string = `https://${name}.wikidot.com`,
-		private workingDirectory: string = `./storage/${name}`,
+		private _workingDirectory: string = `./storage/${name}`,
 		public client: HTTPClient | null,
 		public queue: PromiseQueue | null,
 		public userList: WikiDotUserList | null,
@@ -1579,7 +1583,7 @@ export class WikiDot {
 
 	public async fileExists(page_id: string, file_id: number, size?: number) {
 		try {
-			const stats = await promises.stat(`${this.workingDirectory}/files/${page_id}/${file_id}`)
+			const stats = await promises.stat(`${this._workingDirectory}/files/${page_id}/${file_id}`)
 
 			if (size !== undefined && stats.size != size) {
 				return false
@@ -1603,8 +1607,8 @@ export class WikiDot {
 		this.pushPendingFiles(fileMeta.file_id)
 
 		await this.client.get(fileMeta.url, config).then(async buffer => {
-			await promises.mkdir(`${this.workingDirectory}/files/${pageName}`, {recursive: true})
-			await promises.writeFile(`${this.workingDirectory}/files/${pageName}/${fileMeta.file_id}`, buffer)
+			await promises.mkdir(`${this._workingDirectory}/files/${pageName}`, {recursive: true})
+			await promises.writeFile(`${this._workingDirectory}/files/${pageName}/${fileMeta.file_id}`, buffer)
 			this.removePendingFiles(fileMeta.file_id)
 		}).catch(err => {
 			this.log(`Unable to fetch ${fileMeta.url} because ${err}`)
@@ -1774,7 +1778,7 @@ export class WikiDot {
 			let mapNeedsRebuild = true
 
 			try {
-				mapNeedsRebuild = (await promises.stat(`${this.workingDirectory}/meta/pages`)).isDirectory()
+				mapNeedsRebuild = (await promises.stat(`${this._workingDirectory}/meta/pages`)).isDirectory()
 			} catch(err) {
 				mapNeedsRebuild = false
 			}
@@ -1791,16 +1795,16 @@ export class WikiDot {
 
 				const tasks: any[] = []
 
-				for (const name of await promises.readdir(`${this.workingDirectory}/meta/pages/`)) {
+				for (const name of await promises.readdir(`${this._workingDirectory}/meta/pages/`)) {
 					if (name.endsWith('.json')) {
 						tasks.push(async () => {
-							const metadata: PageMeta = JSON.parse(await promises.readFile(`${this.workingDirectory}/meta/pages/${name}`, {encoding: 'utf-8'}))
+							const metadata: PageMeta = JSON.parse(await promises.readFile(`${this._workingDirectory}/meta/pages/${name}`, {encoding: 'utf-8'}))
 
 							if (metadata != null) {
 								this.pageIdMap.data[metadata.page_id] = metadata.name
 								this.pageIdMap.markDirty()
 							} else {
-								this.error(`${this.workingDirectory}/meta/pages/${name} is malformed!`)
+								this.error(`${this._workingDirectory}/meta/pages/${name} is malformed!`)
 							}
 						})
 					}
@@ -1875,7 +1879,7 @@ export class WikiDot {
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
 
-		const oldMap = await this.loadSiteMap()
+		const oldMap = await this.readSiteMap()
 
 		if (oldMap == null) {
 			this.log(`No previous sitemap was found, doing full scan`)
@@ -1896,7 +1900,7 @@ export class WikiDot {
 				if (!hit) {
 					this.log(`Page ${name} was removed`)
 
-					const metadata = await this.loadPageMetadata(name)
+					const metadata = await this.readPageMetadata(name)
 
 					await this.markPageRemoved(name)
 
@@ -1923,7 +1927,7 @@ export class WikiDot {
 					}
 				}
 
-				let metadata = await this.loadPageMetadata(pageName)
+				let metadata = await this.readPageMetadata(pageName)
 
 				if (
 					metadata == null ||
@@ -2019,7 +2023,7 @@ export class WikiDot {
 									if (!hit) {
 										try {
 											this.log(`File ${emeta.file_id} <${emeta.url}> inside ${pageName} <${pageMeta.page_id}> got removed`)
-											await promises.unlink(`${this.workingDirectory}/files/${pageName}/${emeta.file_id}`)
+											await promises.unlink(`${this._workingDirectory}/files/${pageName}/${emeta.file_id}`)
 										} catch(err) {
 											this.error(String(err))
 										}
@@ -2119,7 +2123,7 @@ export class WikiDot {
 		const forums = await this.fetchForumCategories()
 
 		for (const forum of forums) {
-			const localForum = await this.loadForumCategory(forum.id)
+			const localForum = await this.readForumCategory(forum.id)
 
 			if (localForum != null && localForum.last == forum.last && localForum.full_scan) {
 				continue
@@ -2136,7 +2140,7 @@ export class WikiDot {
 
 				for (const thread of threads) {
 					workers.push(async () => {
-						const localThread = await this.loadForumThread(forum.id, thread.id)
+						const localThread = await this.readForumThread(forum.id, thread.id)
 
 						let shouldFetch = localThread == null || localThread.last != thread.last
 						if (!shouldFetch && localThread != null) {
@@ -2414,7 +2418,7 @@ export class WikiDot {
 						if (num == page_id) {
 							hit = false
 							const page_name = this.pageIdMap.data[page_id]
-							const metadata = await this.loadPageMetadata(page_name)
+							const metadata = await this.readPageMetadata(page_name)
 
 							if (metadata != null) {
 								if (metadata.page_id != num) {
@@ -2494,10 +2498,10 @@ export class WikiDot {
 
 		this.log(`Compressing page revisions`)
 
-		for (const name of await promises.readdir(`${this.workingDirectory}/pages/`)) {
+		for (const name of await promises.readdir(`${this._workingDirectory}/pages/`)) {
 			// hidden/system files start with dot
 			// shortcut with .7z check to avoid excessive filesystem load
-			if (!name.startsWith('.') && !name.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/pages/${name}`)).isDirectory()) {
+			if (!name.startsWith('.') && !name.endsWith('.7z') && (await promises.stat(`${this._workingDirectory}/pages/${name}`)).isDirectory()) {
 				await this.compressRevisions(name)
 			}
 		}
@@ -2508,16 +2512,16 @@ export class WikiDot {
 			let isdir = false
 
 			try {
-				isdir = (await promises.stat(`${this.workingDirectory}/forum/`)).isDirectory()
+				isdir = (await promises.stat(`${this._workingDirectory}/forum/`)).isDirectory()
 			} catch(err) {
 
 			}
 
 			if (isdir) {
-				for (const category of await promises.readdir(`${this.workingDirectory}/forum/`)) {
-					if (!category.startsWith('.') && (await promises.stat(`${this.workingDirectory}/forum/${category}`)).isDirectory()) {
-						for (const thread of await promises.readdir(`${this.workingDirectory}/forum/${category}`)) {
-							if (!thread.startsWith('.') && !thread.endsWith('.7z') && (await promises.stat(`${this.workingDirectory}/forum/${category}/${thread}`)).isDirectory()) {
+				for (const category of await promises.readdir(`${this._workingDirectory}/forum/`)) {
+					if (!category.startsWith('.') && (await promises.stat(`${this._workingDirectory}/forum/${category}`)).isDirectory()) {
+						for (const thread of await promises.readdir(`${this._workingDirectory}/forum/${category}`)) {
+							if (!thread.startsWith('.') && !thread.endsWith('.7z') && (await promises.stat(`${this._workingDirectory}/forum/${category}/${thread}`)).isDirectory()) {
 								await this.compressForumThread(category, thread)
 							}
 						}
@@ -2528,37 +2532,82 @@ export class WikiDot {
 	}
 
 	// local I/O
-	public async loadForumCategory(category: number) {
+	public async readForumCategory(category: number) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/category/${category}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/meta/forum/category/${category}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as LocalForumCategory
 		} catch(err) {
 			return null
 		}
 	}
 
-	public async writeForumCategory(value: LocalForumCategory) {
-		await promises.mkdir(`${this.workingDirectory}/meta/forum/category`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/forum/category/${value.id}.json`, JSON.stringify(value, null, 4))
+	public async readForumCategories() {
+		try {
+			const list = await promises.readdir(`${this._workingDirectory}/meta/forum/category/`)
+			const build: {[key: string]: LocalForumCategory} = {}
+
+			for (const filename of list) {
+				if (filename.match(/^[0-9]+\.json$/)) {
+					const read = await promises.readFile(`${this._workingDirectory}/meta/forum/category/${filename}`, {encoding: 'utf-8'})
+					const cat = JSON.parse(read) as LocalForumCategory
+					build[cat.id] = cat
+				}
+			}
+
+			return build
+		} catch(err) {
+			return {}
+		}
 	}
 
-	public async loadForumThread(category: number, thread: number) {
+	public async readForumThreadList(id: number) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/${category}/${thread}.json`, {encoding: 'utf-8'})
+			const list = await promises.readdir(`${this._workingDirectory}/meta/forum/${id}/`)
+			const build = []
+
+			for (const filename of list) {
+				if (filename.match(/^[0-9]+\.json$/)) {
+					build.push(parseInt(filename.substring(0, filename.length - 5)))
+				}
+			}
+
+			return build
+		} catch(err) {
+			return []
+		}
+	}
+
+	public async writeForumCategory(value: LocalForumCategory) {
+		await promises.mkdir(`${this._workingDirectory}/meta/forum/category`, {recursive: true})
+		await promises.writeFile(`${this._workingDirectory}/meta/forum/category/${value.id}.json`, JSON.stringify(value, null, 4))
+	}
+
+	public async readForumThread(category: number, thread: number) {
+		try {
+			const read = await promises.readFile(`${this._workingDirectory}/meta/forum/${category}/${thread}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as LocalForumThread
 		} catch(err) {
 			return null
 		}
 	}
 
-	public async writeForumThread(category: number, thread: number, value: LocalForumThread) {
-		await promises.mkdir(`${this.workingDirectory}/meta/forum/${category}`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/forum/${category}/${thread}.json`, JSON.stringify(value, null, 4))
+	public async writeForumThread(category: number, thread: number | LocalForumThread, value?: LocalForumThread) {
+		if (value === undefined && typeof thread == 'number') {
+			throw new TypeError('No thread provided')
+		}
+
+		await promises.mkdir(`${this._workingDirectory}/meta/forum/${category}`, {recursive: true})
+
+		if (typeof thread == 'number') {
+			await promises.writeFile(`${this._workingDirectory}/meta/forum/${category}/${thread}.json`, JSON.stringify(value, null, 4))
+		} else {
+			await promises.writeFile(`${this._workingDirectory}/meta/forum/${category}/${thread.id}.json`, JSON.stringify(thread, null, 4))
+		}
 	}
 
-	public async loadForumPost(post: number) {
+	public async readForumPost(post: number) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/forum/post/${post}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/meta/forum/post/${post}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as LocalForumPost
 		} catch(err) {
 			return null
@@ -2566,18 +2615,18 @@ export class WikiDot {
 	}
 
 	public async writeForumPost(post: number, value: LocalForumPost) {
-		await promises.mkdir(`${this.workingDirectory}/meta/forum/post`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/forum/post/${post}.json`, JSON.stringify(value, null, 4))
+		await promises.mkdir(`${this._workingDirectory}/meta/forum/post`, {recursive: true})
+		await promises.writeFile(`${this._workingDirectory}/meta/forum/post/${post}.json`, JSON.stringify(value, null, 4))
 	}
 
 	public async writePostRevision(category: number, thread: number, post: number, revision: 'latest' | number, value: string) {
-		await promises.mkdir(`${this.workingDirectory}/forum/${category}/${thread}/${post}/`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/forum/${category}/${thread}/${post}/${revision}.html`, value)
+		await promises.mkdir(`${this._workingDirectory}/forum/${category}/${thread}/${post}/`, {recursive: true})
+		await promises.writeFile(`${this._workingDirectory}/forum/${category}/${thread}/${post}/${revision}.html`, value)
 	}
 
 	private async _postRevisionListFiles(category: number, thread: number, post: number) {
 		try {
-			return await promises.readdir(`${this.workingDirectory}/forum/${category}/${thread}/${post}/`)
+			return await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/${post}/`)
 		} catch(err) {
 			return []
 		}
@@ -2585,7 +2634,7 @@ export class WikiDot {
 
 	private async _postRevisionList7z(category: number, thread: number, post: number) {
 		try {
-			const list = await listZipFiles(`${this.workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
+			const list = await listZipFiles(`${this._workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
 			const build = []
 			const predicate = `${post}/`
 
@@ -2603,7 +2652,7 @@ export class WikiDot {
 
 	private async _revisionList7z(page: string) {
 		try {
-			const list = await listZipFiles(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
+			const list = await listZipFiles(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
 			const build = []
 
 			for (const piece of list) {
@@ -2620,7 +2669,7 @@ export class WikiDot {
 
 	private async _revisionListFiles(page: string) {
 		try {
-			return await promises.readdir(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/`)
+			return await promises.readdir(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}/`)
 		} catch(err) {
 			return []
 		}
@@ -2670,7 +2719,7 @@ export class WikiDot {
 
 	public async revisionExists(page: string, revision: number) {
 		try {
-			await promises.stat(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
+			await promises.stat(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`)
 			return true
 		} catch(err) {
 			return false
@@ -2678,7 +2727,7 @@ export class WikiDot {
 	}
 
 	private async compressRevisions(normalizedName: string) {
-		const listing = await promises.readdir(`${this.workingDirectory}/pages/${normalizedName}/`)
+		const listing = await promises.readdir(`${this._workingDirectory}/pages/${normalizedName}/`)
 		const txts = []
 		let shouldBeEmpty = true
 
@@ -2696,7 +2745,7 @@ export class WikiDot {
 				continue
 			}
 
-			const path = `${this.workingDirectory}/pages/${normalizedName}/${name}`
+			const path = `${this._workingDirectory}/pages/${normalizedName}/${name}`
 			const stat = await promises.stat(path)
 
 			if (!stat.isFile()) {
@@ -2712,7 +2761,7 @@ export class WikiDot {
 			this.log(`Compressing revisions of ${normalizedName}`)
 
 			let rethrow = false
-			const zipPath = `${this.workingDirectory}/pages/${normalizedName}.7z`
+			const zipPath = `${this._workingDirectory}/pages/${normalizedName}.7z`
 
 			try {
 				const stats = await promises.stat(zipPath)
@@ -2737,7 +2786,7 @@ export class WikiDot {
 				// txts,
 				// TODO: ENAMETOOLONG, if it is really needed (due to conditions above)
 				// if there are many txt files.
-				`${this.workingDirectory}/pages/${normalizedName}/*.txt`
+				`${this._workingDirectory}/pages/${normalizedName}/*.txt`
 			)
 
 			for (const txt of txts) {
@@ -2746,17 +2795,17 @@ export class WikiDot {
 		}
 
 		if (shouldBeEmpty) {
-			await promises.rm(`${this.workingDirectory}/pages/${normalizedName}/`, {recursive: true, force: false})
+			await promises.rm(`${this._workingDirectory}/pages/${normalizedName}/`, {recursive: true, force: false})
 		} else {
-			this.log(`${this.workingDirectory}/pages/${normalizedName}/ is not empty, not removing it.`)
+			this.log(`${this._workingDirectory}/pages/${normalizedName}/ is not empty, not removing it.`)
 		}
 	}
 
 	private async compressForumThread(category: number | string, thread: number | string) {
-		const listing = await promises.readdir(`${this.workingDirectory}/forum/${category}/${thread}`)
+		const listing = await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}`)
 
 		for (const subdir of listing) {
-			const path = `${this.workingDirectory}/forum/${category}/${thread}/${subdir}`
+			const path = `${this._workingDirectory}/forum/${category}/${thread}/${subdir}`
 			const num = parseInt(subdir)
 
 			if (num != num) {
@@ -2802,7 +2851,7 @@ export class WikiDot {
 		this.log(`Compressing forum thread ${thread} in category ${category}`)
 
 		let rethrow = false
-		const zipPath = `${this.workingDirectory}/forum/${category}/${thread}.7z`
+		const zipPath = `${this._workingDirectory}/forum/${category}/${thread}.7z`
 
 		try {
 			const stats = await promises.stat(zipPath)
@@ -2824,24 +2873,24 @@ export class WikiDot {
 
 		await addZipFiles(
 			zipPath,
-			`${this.workingDirectory}/forum/${category}/${thread}/*.*`,
+			`${this._workingDirectory}/forum/${category}/${thread}/*.*`,
 
 			{
 				recursive: true
 			}
 		)
 
-		await promises.rm(`${this.workingDirectory}/forum/${category}/${thread}`, {recursive: true, force: false})
+		await promises.rm(`${this._workingDirectory}/forum/${category}/${thread}`, {recursive: true, force: false})
 	}
 
 	public async writeRevision(page: string, revision: number, body: string) {
-		await promises.mkdir(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`, body)
+		await promises.mkdir(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+		await promises.writeFile(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}/${revision}.txt`, body)
 	}
 
-	public async loadPageMetadata(page: string) {
+	public async readPageMetadata(page: string) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as PageMeta
 		} catch(err) {
 			return null
@@ -2850,7 +2899,7 @@ export class WikiDot {
 
 	public async pageMetadataExists(page: string) {
 		try {
-			return (await promises.stat(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)).isFile()
+			return (await promises.stat(`${this._workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)).isFile()
 		} catch(err) {
 			return false
 		}
@@ -2858,38 +2907,38 @@ export class WikiDot {
 
 	public async markPageRemoved(page: string) {
 		try {
-			await promises.unlink(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)
+			await promises.unlink(`${this._workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			await promises.unlink(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
+			await promises.unlink(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			await promises.rm(`${this.workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
+			await promises.rm(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
 			this.error(String(err))
 		}
 
 		try {
-			await promises.rm(`${this.workingDirectory}/files/${WikiDot.normalizeName(page)}`, {recursive: true})
+			await promises.rm(`${this._workingDirectory}/files/${WikiDot.normalizeName(page)}`, {recursive: true})
 		} catch(err) {
 			this.error(String(err))
 		}
 	}
 
 	public async writePageMetadata(page: string, meta: PageMeta) {
-		await promises.mkdir(`${this.workingDirectory}/meta/pages`, {recursive: true})
-		await promises.writeFile(`${this.workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
+		await promises.mkdir(`${this._workingDirectory}/meta/pages`, {recursive: true})
+		await promises.writeFile(`${this._workingDirectory}/meta/pages/${WikiDot.normalizeName(page)}.json`, JSON.stringify(meta, null, 4))
 	}
 
 	public async loadFileMeta(path: string) {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/files/${path}.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/meta/files/${path}.json`, {encoding: 'utf-8'})
 			return JSON.parse(read) as FileMeta
 		} catch(err) {
 			return null
@@ -2897,7 +2946,7 @@ export class WikiDot {
 	}
 
 	public async writeSiteMap(map: [string, Date | null][]) {
-		await promises.mkdir(`${this.workingDirectory}/meta`, {recursive: true})
+		await promises.mkdir(`${this._workingDirectory}/meta`, {recursive: true})
 
 		const rebuild: any = {}
 
@@ -2909,12 +2958,12 @@ export class WikiDot {
 			}
 		}
 
-		await promises.writeFile(`${this.workingDirectory}/meta/sitemap.json`, JSON.stringify(rebuild, null, 4))
+		await promises.writeFile(`${this._workingDirectory}/meta/sitemap.json`, JSON.stringify(rebuild, null, 4))
 	}
 
-	public async loadSiteMap() {
+	public async readSiteMap() {
 		try {
-			const read = await promises.readFile(`${this.workingDirectory}/meta/sitemap.json`, {encoding: 'utf-8'})
+			const read = await promises.readFile(`${this._workingDirectory}/meta/sitemap.json`, {encoding: 'utf-8'})
 			const json: any = JSON.parse(read)
 
 			const remapped = new Map<string, number | null>()

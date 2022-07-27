@@ -62,6 +62,14 @@ export class DaemonConfig implements IDaemonConfig {
 		this.maximum_jobs = loader.maximum_jobs
 		this.http_proxy = loader.http_proxy
 		this.socks_proxy = loader.socks_proxy
+
+		for (const i in this.wikis) {
+			let url = this.wikis[i].url
+
+			if (url.endsWith('/')) { // Some of wikidot parts don't like double slash
+				this.wikis[i].url = url.substring(0, url.length - 1)
+			}
+		}
 	}
 
 	public makeClient(connectionLimit: number) {

@@ -42,7 +42,7 @@ import { parallel } from "./worker"
 			userList
 		)
 
-		const sitemap = await wiki.loadSiteMap()
+		const sitemap = await wiki.readSiteMap()
 
 		if (sitemap !== null) {
 			process.stdout.write(`Scanning ${name}...\n`)
@@ -54,7 +54,7 @@ import { parallel } from "./worker"
 				let pagename = iterator.next()
 
 				while (!pagename.done) {
-					const metadata = await wiki.loadPageMetadata(pagename.value)
+					const metadata = await wiki.readPageMetadata(pagename.value)
 
 					if (metadata !== null) {
 						let changes = false
@@ -147,6 +147,4 @@ import { parallel } from "./worker"
 	}
 
 	userList?.client.ratelimit?.stopTimer()
-
-	process.exit(0)
 })()
