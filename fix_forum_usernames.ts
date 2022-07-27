@@ -189,6 +189,14 @@ import {promises} from 'fs'
 
 							function matchPosts(list: LocalForumPost[]) {
 								for (const post of list) {
+									matchPosts(post.children)
+
+									if (typeof post.poster != 'string' && typeof post.lastEditBy != 'string') {
+										continue
+									}
+
+									let hit = false
+
 									for (const fpost of flattened) {
 										if (post.id == fpost.id) {
 											if (typeof post.poster == 'string' && typeof fpost.poster == 'number') {
@@ -204,8 +212,14 @@ import {promises} from 'fs'
 											post.poster = fpost.poster
 											post.lastEdit = fpost.lastEdit
 											post.lastEditBy = fpost.lastEditBy
+
+											hit = true
 											break
 										}
+									}
+
+									if (!hit) {
+										process.stderr.write(`[${name}] !!! Failed to match post ${post.id} in ${thread!.title}<${thread!.id}> against newly fetched ones\n`)
 									}
 								}
 							}
