@@ -191,9 +191,18 @@ import {promises} from 'fs'
 								for (const post of list) {
 									for (const fpost of flattened) {
 										if (post.id == fpost.id) {
+											if (typeof post.poster == 'string' && typeof fpost.poster == 'number') {
+												remapped.set(post.poster, fpost.poster)
+											}
+
+											if (typeof post.lastEditBy == 'string' && typeof fpost.lastEditBy == 'number') {
+												remapped.set(post.lastEditBy, fpost.lastEditBy)
+											}
+
 											post.poster = fpost.poster
 											post.lastEdit = fpost.lastEdit
 											post.lastEditBy = fpost.lastEditBy
+											break
 										}
 									}
 								}
