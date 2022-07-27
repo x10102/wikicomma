@@ -84,6 +84,7 @@ import {promises} from 'fs'
 						const tasks: (() => Promise<void>)[] = []
 						let changes = false
 						let brokenNames = false
+						let brokenRevNames = false
 
 						if (typeof thread.lastUser == 'string') {
 							try {
@@ -161,6 +162,34 @@ import {promises} from 'fs'
 
 										changes = true
 									})
+								}
+
+								for (const rev of post.revisions) {
+									if (typeof rev.author == 'string') {
+										tasks.push(async () => {
+											try {
+												const getRemapped = remapped.get(rev.author as never)
+
+												if (getRemapped !== undefined) {
+													rev.author = getRemapped
+												} else {
+													const data = await userList.fetchByUsername(rev.author as never)
+													rev.author = data.user_id
+												}
+
+												await wiki.writeForumCategory(cat)
+											} catch(err) {
+												if (!failureSays.includes(rev.author as never)) {
+													process.stderr.write(`[${name}] Failed to fetch user ${rev.author}! for ${thread!.title}<${thread!.id}> in ${cat.title}<${cat.id}>\n`)
+													failureSays.push(rev.author as never)
+												}
+
+												brokenRevNames = true
+											}
+
+											changes = true
+										})
+									}
 								}
 
 								processPosts(post.children)
@@ -242,6 +271,104 @@ import {promises} from 'fs'
 							}
 						}
 
+						if (brokenRevNames) {
+							async function matchPosts(list: LocalForumPost[]) {
+								for (const post of list) {
+									await matchPosts(post.children)
+
+									let once = false
+
+									for (const rev of post.revisions) {
+										if (typeof rev.author != 'string') {
+											continue
+										}
+
+										const getRemapped = remapped.get(rev.author)
+
+										if (getRemapped !== undefined) {
+											rev.author = getRemapped
+										} else {
+											once = true
+										}
+									}
+
+									if (!once) {
+										continue
+									}
+
+									process.stdout.write(`[${name}] Fetching ALL revisions of post ${post.id} in ${thread!.title}<${thread!.id}> in ${cat.title}<${cat.id}>\n`)
+									const fetched = await wiki.fetchPostRevisionList(post.id)
+
+									for (const rev of post.revisions) {
+										if (typeof rev.author != 'string') {
+											continue
+										}
+
+										const getRemapped = remapped.get(rev.author)
+
+										if (getRemapped !== undefined) {
+											rev.author = getRemapped
+											continue
+										}
+
+										let hit = false
+
+										for (const frev of fetched) {
+											if (rev.id == frev.id) {
+												if (frev.author != null) {
+													remapped.set(rev.author, frev.author)
+													process.stdout.write(`Remapping ${rev.author} to User ID ${frev.author}\n`)
+												}
+
+												rev.author = frev.author
+												break
+											}
+										}
+
+										if (!hit) {
+											process.stderr.write(`[${name}] !!! Failed to match revision ${rev.id} against fetched newly fetched revisions in post ${post.id} in ${thread!.title}<${thread!.id}> against newly fetched ones\n`)
+										}
+									}
+								}
+							}
+
+							await matchPosts(thread.posts)
+						}
+
+						if (typeof thread.startedUser == 'string') {
+							try {
+								const getRemapped = remapped.get(thread.startedUser as never)
+
+								if (getRemapped !== undefined) {
+									thread.startedUser = getRemapped
+								} else {
+									const data = await userList.fetchByUsername(thread.startedUser as never)
+									thread.startedUser = data.user_id
+								}
+
+								await wiki.writeForumCategory(cat)
+							} catch(err) {
+								if (!failureSays.includes(thread.startedUser as never)) {
+									process.stderr.write(`[${name}] Failed to fetch user ${thread.startedUser}! for ${thread!.title}<${thread!.id}> in ${cat.title}<${cat.id}>\n`)
+									failureSays.push(thread.startedUser as never)
+								}
+
+								let bottomMost = thread.posts[0]
+
+								for (const post of thread.posts) {
+									if (post.id < bottomMost.id) {
+										bottomMost = post
+									}
+								}
+
+								if (bottomMost) {
+									thread.startedUser = bottomMost.poster
+								}
+							}
+
+							changes = true
+						}
+
 						if (changes) {
 							process.stderr.write(`[${name}] Updated ${thread!.title}<${thread!.id}> in ${cat.title}<${cat.id}>\n`)
 							await wiki.writeForumThread(cat.id, thread)
@@ -261,4 +388,10 @@ import {promises} from 'fs'
 	}
 
 	userList?.client.ratelimit?.stopTimer()
+
+	process.stdout.write(`Exiting process in 10 seconds.\n`)
+
+	setTimeout(() => {
+		process.exit(0)
+	}, 10000)
 })()
