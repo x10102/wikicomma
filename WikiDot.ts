@@ -1516,19 +1516,29 @@ export class WikiDot {
 	}
 
 	public async fetchPostRevision(revision: number): Promise<ForumRevisionBody> {
-		const json = await this.fetchJson({
-			"revisionId": revision,
-			"moduleName": "forum/sub/ForumPostRevisionModule",
-		}, true)
+		let lastError
 
-		if (json.body != 'ok') {
-			throw Error(`Server returned ${json.body} (${JSON.stringify(json)})`)
+		for (let i = 0; i < 3; i++) {
+			try {
+				const json = await this.fetchJson({
+					"revisionId": revision,
+					"moduleName": "forum/sub/ForumPostRevisionModule",
+				}, true)
+
+				if (json.body != 'ok') {
+					throw Error(`Server returned ${json.body} (${JSON.stringify(json)})`)
+				}
+
+				return {
+					content: json.content,
+					title: json.title
+				}
+			} catch(err) {
+				lastError = err
+			}
 		}
 
-		return {
-			content: json.content,
-			title: json.title
-		}
+		throw lastError
 	}
 
 	// high-level api
@@ -2219,24 +2229,28 @@ export class WikiDot {
 										}
 
 										revWorker.push((async () => {
-											this.log(`Fetching revision ${revision.id} of post ${post.id}`)
-											const revContent = await this.fetchPostRevision(revision.id)
-											await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
-											fetchOnce = true
+											try {
+												this.log(`Fetching revision ${revision.id} of post ${post.id}`)
+												const revContent = await this.fetchPostRevision(revision.id)
+												await this.writePostRevision(forum.id, thread.id, post.id, revision.id, revContent.content)
+												fetchOnce = true
 
-											const find = findPostRevision(localPost.revisions, revision.id)
+												const find = findPostRevision(localPost.revisions, revision.id)
 
-											if (find != null) {
-												const index = localPost.revisions.indexOf(find)
-												localPost.revisions.splice(index, 1)
+												if (find != null) {
+													const index = localPost.revisions.indexOf(find)
+													localPost.revisions.splice(index, 1)
+												}
+
+												localPost.revisions.push({
+													title: revContent.title,
+													author: revision.author,
+													id: revision.id,
+													stamp: revision.stamp
+												})
+											} catch(err) {
+												throw new Error(`Fetching revision ${revision.id} of post ${post.id}: ${err}`)
 											}
-
-											localPost.revisions.push({
-												title: revContent.title,
-												author: revision.author,
-												id: revision.id,
-												stamp: revision.stamp
-											})
 										})())
 									}
 

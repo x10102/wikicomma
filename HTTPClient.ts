@@ -480,13 +480,33 @@ export class HTTPClient {
 		let lastActivity = Date.now()
 		let stream: http.IncomingMessage | undefined = undefined
 
-		const timeoutID = setInterval(() => {
+		let validateCompressedInput: (() => Promise<false | Buffer>) | undefined = undefined
+		let endCallback: ((buffer?: Buffer) => void) | undefined = undefined
+
+		const timeoutID = setInterval(async () => {
 			if (finished) {
 				clearInterval(timeoutID)
 				return
 			}
 
 			if (lastActivity + 20_000 < Date.now()) {
+				if (validateCompressedInput !== undefined) {
+					const bufferOutput = await validateCompressedInput()
+
+					if (bufferOutput) {
+						process.stderr.write(`[HTTP Client] 'end' event was never fired, yet HTTP request was completed! This is a node.js bug!\n`)
+						// wtfffffff???
+						// hey, node.js, what the fuck
+
+						// where is my `end` event
+						clearInterval(timeoutID)
+						endCallback!(bufferOutput)
+						stream!.destroy()
+					}
+
+					return
+				}
+
 				// damn SLOW
 				// better to reject
 
@@ -558,27 +578,24 @@ export class HTTPClient {
 
 			let memcache: Buffer[] = []
 
-			response.on('data', (chunk: Buffer) => {
-				lastActivity = Date.now()
-				lock.heartbeat()
-				memcache.push(chunk)
-			})
+			validateCompressedInput = async () => {
+				let can = false
 
-			response.on('error', (err) => {
-				if (finished) {
-					return
+				switch (response.headers['content-encoding']) {
+					case 'br':
+						can = true
+						break
+					case 'gzip':
+						can = true
+						break
+					case 'deflate':
+						can = true
+						break
 				}
 
-				console.error(`Throw INNER ${err} on ${value.traceback}`)
-				lock.unlock()
-				clearInterval(timeoutID)
-				value.reject(err)
-			})
-
-			response.on('end', async () => {
-				clearInterval(timeoutID)
-				lock.unlock()
-				finished = true
+				if (!can) {
+					return false
+				}
 
 				let size = 0
 
@@ -597,24 +614,90 @@ export class HTTPClient {
 					offset += buff.length
 				}
 
-				// mark buffers as dead for gc
-				memcache = []
+				let decompressed: Buffer
 
 				try {
 					switch (response.headers['content-encoding']) {
 						case 'br':
-							newbuff = await pbrotliDecompress(newbuff)
+							decompressed = await pbrotliDecompress(newbuff)
 							break
 						case 'gzip':
-							newbuff = await punzip(newbuff)
+							decompressed = await punzip(newbuff)
 							break
 						case 'deflate':
-							newbuff = await pinflate(newbuff)
+							decompressed = await pinflate(newbuff)
 							break
 					}
 				} catch(err) {
-					value.reject(err)
+					return false
+				}
+
+				return decompressed!
+			}
+
+			response.on('data', (chunk: Buffer) => {
+				lastActivity = Date.now()
+				lock.heartbeat()
+				memcache.push(chunk)
+			})
+
+			response.on('error', (err) => {
+				if (finished) {
 					return
+				}
+
+				console.error(`Throw INNER ${err} on ${value.traceback}`)
+				lock.unlock()
+				clearInterval(timeoutID)
+				value.reject(err)
+			})
+
+			endCallback = async (newbuff?: Buffer) => {
+				if (finished) {
+					return
+				}
+
+				clearInterval(timeoutID)
+				lock.unlock()
+				finished = true
+
+				if (newbuff === undefined) {
+					let size = 0
+
+					for (const buff of memcache) {
+						size += buff.length
+					}
+
+					newbuff = Buffer.allocUnsafe(size)
+					let offset = 0
+
+					for (const buff of memcache) {
+						for (let i = 0; i < buff.length; i++) {
+							newbuff[offset + i] = buff[i]
+						}
+
+						offset += buff.length
+					}
+
+					// mark buffers as dead for gc
+					memcache = []
+
+					try {
+						switch (response.headers['content-encoding']) {
+							case 'br':
+								newbuff = await pbrotliDecompress(newbuff)
+								break
+							case 'gzip':
+								newbuff = await punzip(newbuff)
+								break
+							case 'deflate':
+								newbuff = await pinflate(newbuff)
+								break
+						}
+					} catch(err) {
+						value.reject(err)
+						return
+					}
 				}
 
 				if (response.statusCode == 200 || response.statusCode == 206) {
@@ -622,7 +705,9 @@ export class HTTPClient {
 				} else {
 					value.reject(new HTTPError(response.statusCode, newbuff, 'Server returned ' + response.statusCode))
 				}
-			})
+			}
+
+			response.on('end', endCallback)
 		}
 
 		const request = value.https ? https.request(params, callback) : http.request(params, callback)
