@@ -1713,9 +1713,10 @@ export class WikiDot {
 
 	private static fileIdMatcher = /file-row-([0-9]+)/i
 
-	public async fetchFileList(page_id: number) {
+	public async fetchFileList(page_id: number, page: number = 1) {
 		const json = await this.fetchJson({
 			"page_id": page_id,
+			"page": page,
 			"moduleName": "files/PageFilesModule",
 		})
 
@@ -1739,14 +1740,33 @@ export class WikiDot {
 	}
 
 	public async fetchFileListForce(page_id: number) {
-		while (true) {
-			try {
-				return await this.fetchFileList(page_id)
-			} catch(err) {
-				this.error(`Encountered ${err} when fetching file list, sleeping for 5 seconds`)
-				await sleep(5_000)
+		const listing = []
+
+		for (let page = 0;; page++) {
+			let hit = false
+
+			while (true) {
+				try {
+					const getlist = await this.fetchFileList(page_id, page)
+
+					if (getlist.length < 100) {
+						hit = true
+					}
+
+					listing.push(...getlist)
+					break
+				} catch(err) {
+					this.error(`Encountered ${err} when fetching file list, sleeping for 5 seconds`)
+					await sleep(5_000)
+				}
+			}
+
+			if (hit) {
+				break
 			}
 		}
+
+		return listing
 	}
 
 	public async fetchFileMetaListForce(page_id: number, existing: FileMeta[] = []) {
@@ -1775,7 +1795,7 @@ export class WikiDot {
 		return list2
 	}
 
-	private static META_VERSION = 16
+	private static META_VERSION = 17
 
 	public async workLoop(lock: Lock) {
 		if (this.client === null || this.queue === null) {
