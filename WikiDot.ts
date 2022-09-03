@@ -1073,7 +1073,7 @@ export class WikiDot {
 			meta.rating = parseInt(ratingElem)
 		}
 
-		const discussElem = html.querySelector('div#discuss-button')?.attributes['href']
+		const discussElem = html.querySelector('#discuss-button')?.attributes['href']
 
 		if (discussElem != undefined) {
 			const match = discussElem.match(WikiDot.threadRegExp)
@@ -1795,7 +1795,7 @@ export class WikiDot {
 		return list2
 	}
 
-	private static META_VERSION = 17
+	private static META_VERSION = 18
 
 	public async workLoop(lock: Lock) {
 		if (this.client === null || this.queue === null) {
