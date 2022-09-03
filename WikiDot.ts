@@ -191,6 +191,7 @@ export interface HeadlessForumPost {
 	stamp: number
 	lastEdit?: number
 	lastEditBy?: UserID
+	title: string
 }
 
 export interface ForumPost extends ForumRevisionBody, HeadlessForumPost {
@@ -2227,6 +2228,7 @@ export class WikiDot {
 
 								const localPost: LocalForumPost = {
 									id: post.id,
+									title: post.title,
 									poster: post.poster,
 									stamp: post.stamp,
 									lastEdit: post.lastEdit,
