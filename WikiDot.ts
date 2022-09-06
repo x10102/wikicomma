@@ -2720,7 +2720,7 @@ export class WikiDot {
 				if (piece.file != undefined) { // ???
 					const indexOf = piece.file.indexOf('/')
 
-					if (indexOf != -1) {
+					if (indexOf != -1 && piece.file.endsWith('.html')) {
 						build.push(piece.file.substring(0, indexOf))
 					}
 				}
