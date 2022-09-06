@@ -2194,6 +2194,15 @@ export class WikiDot {
 							if (shouldFetch) {
 								this.error(`Post amount mismatch of ${thread.id} (expected ${thread.postsNum}, got ${count})`)
 							}
+
+							if (!shouldFetch) {
+								const existingRevisions = await this.forumFetchedThreadsList(forum.id, thread.id)
+
+								if (existingRevisions.length != count) {
+									this.error(`Fetched post count mismatch of ${thread.id} (expected ${count}, got ${existingRevisions.length})`)
+									shouldFetch = true
+								}
+							}
 						}
 
 						// TODO: IF we have meta, and it says that we fetched entire thread
@@ -2237,12 +2246,13 @@ export class WikiDot {
 									children: []
 								}
 
+								const existingRevisions = await this.revisionListForumPost(forum.id, thread.id, post.id)
+
 								if (post.lastEdit != undefined) {
 									this.log(`Fetching revision list of post ${post.id}`)
 									const revisionList = await this.fetchPostRevisionList(post.id)
 
 									const revWorker = []
-									const existingRevisions = await this.revisionListForumPost(forum.id, thread.id, post.id)
 
 									for (const revision of revisionList) {
 										if (existingRevisions.includes(revision.id) && findPostRevision(localPost.revisions, revision.id)) {
@@ -2288,6 +2298,9 @@ export class WikiDot {
 									if (revWorker.length != 0) {
 										await Promise.all(revWorker)
 									}
+								} else if (!existingRevisions.includes('latest')) {
+									await this.writePostRevision(forum.id, thread.id, post.id, 'latest', post.content)
+									fetchOnce = true
 								}
 
 								const workers = []
@@ -2690,6 +2703,35 @@ export class WikiDot {
 		}
 	}
 
+	private async _threadListFetchedReplies(category: number, thread: number) {
+		try {
+			return await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/`)
+		} catch(err) {
+			return []
+		}
+	}
+
+	private async _threadListFetchedReplies7z(category: number, thread: number) {
+		try {
+			const list = await listZipFiles(`${this._workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
+			const build = []
+
+			for (const piece of list) {
+				if (piece.file != undefined) { // ???
+					const indexOf = piece.file.indexOf('/')
+
+					if (indexOf != -1) {
+						build.push(piece.file.substring(0, indexOf))
+					}
+				}
+			}
+
+			return build
+		} catch(err) {
+			return []
+		}
+	}
+
 	private async _revisionList7z(page: string) {
 		try {
 			const list = await listZipFiles(`${this._workingDirectory}/pages/${WikiDot.normalizeName(page)}.7z`)
@@ -2747,6 +2789,28 @@ export class WikiDot {
 								list.push(parseInt(rname))
 							} else {
 								list.push(rname)
+							}
+						}
+					}
+				}
+
+				resolve(list)
+			})
+		})
+	}
+
+	public forumFetchedThreadsList(category: number, thread: number): Promise<number[]> {
+		return new Promise((resolve, reject) => {
+			Promise.allSettled([this._threadListFetchedReplies(category, thread), this._threadListFetchedReplies7z(category, thread)]).then(data => {
+				const list: number[] = []
+
+				for (const piece of data) {
+					if (piece.status == 'fulfilled') {
+						for (const name of piece.value) {
+							const parsed = parseInt(name)
+
+							if (!isNaN(parsed) && !list.includes(parsed)) {
+								list.push(parsed)
 							}
 						}
 					}
