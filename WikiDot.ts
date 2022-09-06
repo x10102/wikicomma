@@ -22,7 +22,7 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 
 import { encode } from "querystring"
-import { HTTPClient, RequestConfig } from './HTTPClient'
+import { HTTPClient, HTTPError, RequestConfig } from './HTTPClient'
 import { parse, HTMLElement, TextNode } from 'node-html-parser'
 import { promises, read } from 'fs'
 import { promisify } from 'util'
@@ -2271,7 +2271,11 @@ export class WikiDot {
 													stamp: revision.stamp
 												})
 											} catch(err) {
-												throw new Error(`Fetching revision ${revision.id} of post ${post.id}: ${err}`)
+												if (err instanceof HTTPError && err.response === 500) {
+													// slurp it, wikidot is hopeless
+												} else {
+													throw new Error(`Fetching revision ${revision.id} of post ${post.id}: ${err}`)
+												}
 											}
 										})())
 									}

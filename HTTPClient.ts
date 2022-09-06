@@ -100,7 +100,7 @@ export class HTTPCookie implements HTTPCookieData {
 	}
 }
 
-class HTTPError {
+export class HTTPError {
 	constructor(
 		public response: number | undefined,
 		public body: string | Buffer | null,
