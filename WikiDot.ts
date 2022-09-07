@@ -2174,6 +2174,8 @@ export class WikiDot {
 						const localThread = await this.readForumThread(forum.id, thread.id)
 
 						let shouldFetch = localThread == null || localThread.last != thread.last
+						let localPostsAndRevisions: [number[], Map<number, string[]>] | null = null
+
 						if (!shouldFetch && localThread != null) {
 							let count = 0
 
@@ -2196,10 +2198,10 @@ export class WikiDot {
 							}
 
 							if (!shouldFetch) {
-								const existingRevisions = await this.forumFetchedThreadsList(forum.id, thread.id)
+								localPostsAndRevisions = await this.readPostsAndRevisionsOfThread(forum.id, thread.id)
 
-								if (existingRevisions.length != count) {
-									this.error(`Fetched post count mismatch of ${thread.id} (expected ${count}, got ${existingRevisions.length})`)
+								if (localPostsAndRevisions[0].length != count) {
+									this.error(`Fetched post count mismatch of ${thread.id} (expected ${count}, got ${localPostsAndRevisions[0].length})`)
 									shouldFetch = true
 								}
 							}
@@ -2229,6 +2231,12 @@ export class WikiDot {
 								posts: []
 							}
 
+							if (localPostsAndRevisions === null) {
+								localPostsAndRevisions = await this.readPostsAndRevisionsOfThread(forum.id, thread.id)
+							}
+
+							const [_, knownPostsRevs] = localPostsAndRevisions
+
 							const posts = await this.fetchAllThreadPosts(thread.id)
 							let fetchOnce = false
 
@@ -2246,7 +2254,7 @@ export class WikiDot {
 									children: []
 								}
 
-								const existingRevisions = await this.revisionListForumPost(forum.id, thread.id, post.id)
+								const existingRevisions = knownPostsRevs.get(post.id) ?? []
 
 								if (post.lastEdit != undefined) {
 									this.log(`Fetching revision list of post ${post.id}`)
@@ -2255,7 +2263,7 @@ export class WikiDot {
 									const revWorker = []
 
 									for (const revision of revisionList) {
-										if (existingRevisions.includes(revision.id) && findPostRevision(localPost.revisions, revision.id)) {
+										if (existingRevisions.includes(revision.id.toString()) && findPostRevision(localPost.revisions, revision.id)) {
 											// this.log(`Reusing existing post ${post.id} revision ${revision.id}`)
 											continue
 										}
@@ -2703,6 +2711,21 @@ export class WikiDot {
 		}
 	}
 
+	private async _readPostsAndRevsLists(category: number, thread: number): Promise<[string[], Map<string, string[]>]> {
+		try {
+			const posts = await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/`)
+			const revs = new Map<string, string[]>()
+
+			for (const post of posts) {
+				revs.set(post, await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/${post}/`))
+			}
+
+			return [posts, revs]
+		} catch(err) {
+			return [[], new Map()]
+		}
+	}
+
 	private async _threadListFetchedReplies(category: number, thread: number) {
 		try {
 			return await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/`)
@@ -2729,6 +2752,42 @@ export class WikiDot {
 			return build
 		} catch(err) {
 			return []
+		}
+	}
+
+	private async _readPostsAndRevsLists7z(category: number, thread: number): Promise<[string[], Map<string, string[]>]> {
+		try {
+			const list = await listZipFiles(`${this._workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
+			const posts: string[] = []
+			const revs = new Map<string, string[]>()
+			const matcher = /^(\d+)\/(\d+)\.html/
+
+			for (const piece of list) {
+				if (piece.file != undefined) { // ???
+					const match = piece.file.match(matcher)
+
+					if (match != null) {
+						const [_, postId, revision] = match
+
+						if (!posts.includes(postId)) {
+							posts.push(postId)
+						}
+
+						let getList = revs.get(postId)
+
+						if (getList === undefined) {
+							getList = []
+							revs.set(postId, getList)
+						}
+
+						getList.push(revision)
+					}
+				}
+			}
+
+			return [posts, new Map()]
+		} catch(err) {
+			return [[], new Map()]
 		}
 	}
 
@@ -2795,6 +2854,41 @@ export class WikiDot {
 				}
 
 				resolve(list)
+			})
+		})
+	}
+
+	public readPostsAndRevisionsOfThread(category: number, thread: number): Promise<[number[], Map<number, string[]>]> {
+		return new Promise((resolve, reject) => {
+			Promise.allSettled([this._readPostsAndRevsLists(category, thread), this._readPostsAndRevsLists7z(category, thread)]).then(data => {
+				const posts: number[] = []
+				const postsRevs = new Map<number, string[]>()
+
+				for (const piece of data) {
+					if (piece.status == 'fulfilled') {
+						for (const postId of piece.value[0]) {
+							const id = parseInt(postId)
+
+							if (!isNaN(id) && !posts.includes(id)) {
+								posts.push(id)
+							}
+						}
+
+						for (const [key, value] of piece.value[1]) {
+							const id = parseInt(key)
+
+							if (!isNaN(id)) {
+								if (postsRevs.has(id)) {
+									postsRevs.get(id)!.push(...value)
+								} else {
+									postsRevs.set(id, value)
+								}
+							}
+						}
+					}
+				}
+
+				resolve([posts, postsRevs])
 			})
 		})
 	}
