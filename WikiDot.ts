@@ -2717,7 +2717,15 @@ export class WikiDot {
 			const revs = new Map<string, string[]>()
 
 			for (const post of posts) {
-				revs.set(post, await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/${post}/`))
+				const parsedNames = []
+
+				for (const filename of await promises.readdir(`${this._workingDirectory}/forum/${category}/${thread}/${post}/`)) {
+					if (filename.endsWith('.html')) {
+						parsedNames.push(filename.substring(0, filename.length - 5))
+					}
+				}
+
+				revs.set(post, parsedNames)
 			}
 
 			return [posts, revs]
@@ -2760,7 +2768,7 @@ export class WikiDot {
 			const list = await listZipFiles(`${this._workingDirectory}/forum/${category}/${thread}.7z`, {recursive: true})
 			const posts: string[] = []
 			const revs = new Map<string, string[]>()
-			const matcher = /^(\d+)\/(\d+)\.html/
+			const matcher = /^(\d+)\/(.+?)\.html$/
 
 			for (const piece of list) {
 				if (piece.file != undefined) { // ???
