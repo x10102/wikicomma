@@ -1685,13 +1685,41 @@ export class WikiDot {
 		const uploader = rows[5]?.querySelectorAll('td')[1]
 		const date = rows[6]?.querySelectorAll('td')[1]
 
-		if (name === undefined || name === null) return null
-		if (fullURL === undefined || fullURL === null) return null
-		if (size === undefined || size === null) return null
-		if (mime === undefined || mime === null) return null
-		if (contentType === undefined || contentType === null) return null
-		if (uploader === undefined || uploader === null) return null
-		if (date === undefined || date === null) return null
+		if (name === undefined || name === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (fullURL === undefined || fullURL === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (size === undefined || size === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (mime === undefined || mime === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (contentType === undefined || contentType === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (uploader === undefined || uploader === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
+		if (date === undefined || date === null) {
+			this.error(`Encountered invalid HTML layout while fetching file meta of ${file_id}, HTML was: ${json.body}`)
+			return null
+		}
+
 
 		const matchAuthor = this.matchAndFetchUser(uploader)
 
