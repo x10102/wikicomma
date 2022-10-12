@@ -1662,7 +1662,7 @@ export class WikiDot {
 	private static fileSizeMatcher = /([0-9]+) bytes/i
 	private static FILEMETA_VERSION = 1
 
-	public async fetchFileMeta(file_id: number): Promise<FileMeta> {
+	public async fetchFileMeta(file_id: number): Promise<FileMeta | null> {
 		this.log(`Fetching file meta of ${file_id}`)
 
 		const json = await this.fetchJson({
@@ -1677,13 +1677,21 @@ export class WikiDot {
 		const html = parse(json.body)
 		const rows = html.querySelectorAll('tr')
 
-		const name = rows[0].querySelectorAll('td')[1]
-		const fullURL = rows[1].querySelectorAll('td')[1]
-		const size = rows[2].querySelectorAll('td')[1]
-		const mime = rows[3].querySelectorAll('td')[1]
-		const contentType = rows[4].querySelectorAll('td')[1]
-		const uploader = rows[5].querySelectorAll('td')[1]
-		const date = rows[6].querySelectorAll('td')[1]
+		const name = rows[0]?.querySelectorAll('td')[1]
+		const fullURL = rows[1]?.querySelectorAll('td')[1]
+		const size = rows[2]?.querySelectorAll('td')[1]
+		const mime = rows[3]?.querySelectorAll('td')[1]
+		const contentType = rows[4]?.querySelectorAll('td')[1]
+		const uploader = rows[5]?.querySelectorAll('td')[1]
+		const date = rows[6]?.querySelectorAll('td')[1]
+
+		if (name === undefined || name === null) return null
+		if (fullURL === undefined || fullURL === null) return null
+		if (size === undefined || size === null) return null
+		if (mime === undefined || mime === null) return null
+		if (contentType === undefined || contentType === null) return null
+		if (uploader === undefined || uploader === null) return null
+		if (date === undefined || date === null) return null
 
 		const matchAuthor = this.matchAndFetchUser(uploader)
 
@@ -1791,7 +1799,11 @@ export class WikiDot {
 		}
 
 		// list2.push(...existing)
-		list2.push(...(await Promise.all(list)))
+		for (const meta of (await Promise.all(list))) {
+			if (meta !== null) {
+				list2.push(meta)
+			}
+		}
 
 		return list2
 	}
@@ -2424,12 +2436,15 @@ export class WikiDot {
 				if (mapped == undefined) {
 					this.log(`Re-fetching file meta of ${id}`)
 					const fetchedMeta = await this.fetchFileMeta(id)
-					const match = WikiDot.splitFilePathRaw(fetchedMeta.url)
 
-					if (match != null) {
-						const [matched, split, last] = match
-						this.writeToFileMap(fetchedMeta, split, last)
-						mapped = this.fileMap.data[id]
+					if (fetchedMeta != null) {
+						const match = WikiDot.splitFilePathRaw(fetchedMeta.url)
+
+						if (match != null) {
+							const [matched, split, last] = match
+							this.writeToFileMap(fetchedMeta, split, last)
+							mapped = this.fileMap.data[id]
+						}
 					}
 				}
 
