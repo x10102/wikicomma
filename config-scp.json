@@ -90,6 +90,46 @@
 			"url": "http://scpvakfi.wikidot.com"
 		},
 		{
+			"name": "scp-ar",
+			"url": "http://scp-ar.wikidot.com"
+		},
+		{
+			"name": "scp-cy",
+			"url": "http://scp-cy.wikidot.com"
+		},
+		{
+			"name": "scp-et",
+			"url": "http://scp-et.wikidot.com"
+		},
+		{
+			"name": "scp-he",
+			"url": "http://scp-he.wikidot.com"
+		},
+		{
+			"name": "scp-hu",
+			"url": "http://scp-hu.wikidot.com"
+		},
+		{
+			"name": "scp-jbo",
+			"url": "http://scp-jbo.wikidot.com"
+		},
+		{
+			"name": "scp-nl",
+			"url": "http://scp-nl.wikidot.com"
+		},
+		{
+			"name": "scp-ro",
+			"url": "http://scp-romanian.wikidot.com"
+		},
+		{
+			"name": "scp-sh",
+			"url": "http://scp-sh.wikidot.com"
+		},
+		{
+			"name": "scp-sl",
+			"url": "http://scp-slovenija.wikidot.com"
+		},
+		{
 			"name": "wl-pl",
 			"url": "http://wanderers-library-pl.wikidot.com"
 		},
@@ -160,6 +200,14 @@
 		{
 			"name": "o5-el",
 			"url": "http://commado5-el.wikidot.com"
+		},
+		{
+			"name": "o5-nl",
+			"url": "http://o5commissie.wikidot.com"
+		},
+		{
+			"name": "o5-sl",
+			"url": "http://ukaz-o5.wikidot.com"
 		},
 		{
 			"name": "scp-int-sandbox",
@@ -264,6 +312,22 @@
 		{
 			"name": "scpvakfisandbox",
 			"url": "http://scpvakfisandbox.wikidot.com"
+		},
+		{
+			"name": "scpsandboxhu",
+			"url": "http://scpsandboxhu.wikidot.com"
+		},
+		{
+			"name": "scpsandboxnl",
+			"url": "http://scpsandboxnl.wikidot.com"
+		},
+		{
+			"name": "scp-sh-sandbox",
+			"url": "http://scp-sh-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-sl",
+			"url": "http://scp-sandbox-sl.wikidot.com"
 		},
 		{
 			"name": "backrooms-en",
