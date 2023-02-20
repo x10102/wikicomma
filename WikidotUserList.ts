@@ -398,6 +398,7 @@ export class WikiDotUserList {
 		if (matched_against.activity !== undefined) {
 			for (const key in WikiDotUserList.activity_levels) {
 				if (matched_against.activity.match((WikiDotUserList.activity_levels as {[key: string]: RegExp})[key]) !== null) {
+					// @ts-ignore implicit-any
 					activity = UserActivity[key]
 					break
 				}
