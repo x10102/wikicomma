@@ -130,6 +130,10 @@
 			"url": "http://scp-slovenija.wikidot.com"
 		},
 		{
+			"name": "scp-la",
+			"url": "http://scp-la.wikidot.com"
+		},
+		{
 			"name": "wl-pl",
 			"url": "http://wanderers-library-pl.wikidot.com"
 		},
@@ -328,6 +332,34 @@
 		{
 			"name": "scp-sandbox-sl",
 			"url": "http://scp-sandbox-sl.wikidot.com"
+		},
+		{
+			"name": "smlt",
+			"url": "http://smlt.wikidot.com"
+		},
+		{
+			"name": "topia",
+			"url": "http://topia.wikidot.com"
+		},
+		{
+			"name": "kaktuskontainer",
+			"url": "http://kaktuskontainer.wikidot.com"
+		},
+		{
+			"name": "scpdsandbox",
+			"url": "http://scpdsandbox.wikidot.com"
+		},
+		{
+			"name": "scptestwiki",
+			"url": "http://scptestwiki.wikidot.com"
+		},
+		{
+			"name": "scpclassic",
+			"url": "http://scpclassic.wikidot.com"
+		},
+		{
+			"name": "scpexplained",
+			"url": "http://scpexplained.wikidot.com"
 		},
 		{
 			"name": "backrooms-en",
