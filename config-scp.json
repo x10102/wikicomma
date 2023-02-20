@@ -214,6 +214,42 @@
 			"url": "http://ukaz-o5.wikidot.com"
 		},
 		{
+			"name": "backrooms-en",
+			"url": "http://backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-vn",
+			"url": "http://backrooms-vn.wikidot.com"
+		},
+		{
+			"name": "backrooms-pl",
+			"url": "http://pl-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-cn",
+			"url": "http://backrooms-wiki-cn.wikidot.com"
+		},
+		{
+			"name": "backrooms-fr",
+			"url": "http://fr-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-ru",
+			"url": "http://ru-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-pt",
+			"url": "http://pt-br-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-es",
+			"url": "http://es-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-jp",
+			"url": "http://japan-backrooms-wiki.wikidot.com"
+		},
+		{
 			"name": "scp-int-sandbox",
 			"url": "http://scp-int-sandbox.wikidot.com"
 		},
@@ -360,42 +396,6 @@
 		{
 			"name": "scpexplained",
 			"url": "http://scpexplained.wikidot.com"
-		},
-		{
-			"name": "backrooms-en",
-			"url": "http://backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-vn",
-			"url": "http://backrooms-vn.wikidot.com"
-		},
-		{
-			"name": "backrooms-pl",
-			"url": "http://pl-backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-cn",
-			"url": "http://backrooms-wiki-cn.wikidot.com"
-		},
-		{
-			"name": "backrooms-fr",
-			"url": "http://fr-backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-ru",
-			"url": "http://ru-backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-pt",
-			"url": "http://pt-br-backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-es",
-			"url": "http://es-backrooms-wiki.wikidot.com"
-		},
-		{
-			"name": "backrooms-jp",
-			"url": "http://japan-backrooms-wiki.wikidot.com"
 		},
 		{
 			"name": "brucebase",
