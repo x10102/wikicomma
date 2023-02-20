@@ -396,6 +396,10 @@
 		{
 			"name": "backrooms-jp",
 			"url": "http://japan-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "brucebase",
+			"url": "http://brucebase.wikidot.com"
 		}
 	],
 	"ratelimit": {
