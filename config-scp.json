@@ -82,6 +82,14 @@
 			"url": "http://scp-idn.wikidot.com"
 		},
 		{
+			"name": "scp-nd",
+			"url": "http://scp-nd.wikidot.com"
+		},
+		{
+			"name": "scp-tr",
+			"url": "http://scpvakfi.wikidot.com"
+		},
+		{
 			"name": "wl-pl",
 			"url": "http://wanderers-library-pl.wikidot.com"
 		},
@@ -172,6 +180,90 @@
 		{
 			"name": "scpkrsandbox",
 			"url": "http://scpkrsandbox.wikidot.com"
+		},
+		{
+			"name": "scpsandboxcn",
+			"url": "http://scpsandboxcn.wikidot.com"
+		},
+		{
+			"name": "sandboxscpfr",
+			"url": "http://sandboxscpfr.wikidot.com"
+		},
+		{
+			"name": "scpsandbox-pl",
+			"url": "http://scpsandbox-pl.wikidot.com"
+		},
+		{
+			"name": "borradores-scp-es",
+			"url": "http://borradores-scp-es.wikidot.com"
+		},
+		{
+			"name": "borradores-scp-es-2",
+			"url": "http://borradores-scp-es-2.wikidot.com"
+		},
+		{
+			"name": "scp-th-sandbox",
+			"url": "http://scp-th-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-jp-sandbox2",
+			"url": "http://scp-jp-sandbox2.wikidot.com"
+		},
+		{
+			"name": "scp-jp-sandbox3",
+			"url": "http://scp-jp-sandbox3.wikidot.com"
+		},
+		{
+			"name": "scp-jp-storage",
+			"url": "http://scp-jp-storage.wikidot.com"
+		},
+		{
+			"name": "scpsandboxde",
+			"url": "http://scpsandboxde.wikidot.com"
+		},
+		{
+			"name": "scpsandboxit",
+			"url": "http://scpsandboxit.wikidot.com"
+		},
+		{
+			"name": "scpsandbox-ua",
+			"url": "http://scpsandbox-ua.wikidot.com"
+		},
+		{
+			"name": "scpsandboxbr",
+			"url": "http://scpsandboxbr.wikidot.com"
+		},
+		{
+			"name": "scp-cs-sandbox",
+			"url": "http://scp-cs-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-cs-sandbox-2",
+			"url": "http://scp-cs-sandbox-2.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-zh",
+			"url": "http://scp-sandbox-zh.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox2-zh",
+			"url": "http://scp-sandbox2-zh.wikidot.com"
+		},
+		{
+			"name": "scpvnsandbox",
+			"url": "http://scpvnsandbox.wikidot.com"
+		},
+		{
+			"name": "sandboxscp-el",
+			"url": "http://sandboxscp-el.wikidot.com"
+		},
+		{
+			"name": "scp-id-sandbox",
+			"url": "http://scp-id-sandbox.wikidot.com"
+		},
+		{
+			"name": "scpvakfisandbox",
+			"url": "http://scpvakfisandbox.wikidot.com"
 		},
 		{
 			"name": "backrooms-en",
