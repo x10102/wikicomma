@@ -1742,7 +1742,7 @@ export class WikiDot {
 			try {
 				return await this.fetchFileMeta(file_id)
 			} catch(err) {
-				this.error(`Encountered ${err} when fetching file meta, sleeping for 5 seconds`)
+				this.error(`Encountered ${err} when fetching file meta (ID ${file_id}), sleeping for 5 seconds`)
 				await sleep(5_000)
 			}
 		}
