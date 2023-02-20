@@ -2,6 +2,10 @@
 	"base_directory": "/wikidot",
 	"wikis": [
 		{
+			"name": "scp-int",
+			"url": "http://scp-int.wikidot.com"
+		},
+		{
 			"name": "scp-en",
 			"url": "https://scp-wiki.wikidot.com"
 		},
@@ -30,7 +34,7 @@
 			"url": "http://lafundacionscp.wikidot.com"
 		},
 		{
-			"name": "scp-ja",
+			"name": "scp-jp",
 			"url": "http://scp-jp.wikidot.com"
 		},
 		{
@@ -66,7 +70,7 @@
 			"url": "http://scp-zh-tr.wikidot.com"
 		},
 		{
-			"name": "scp-vi",
+			"name": "scp-vn",
 			"url": "http://scp-vn.wikidot.com"
 		},
 		{
@@ -98,12 +102,60 @@
 			"url": "http://wanderers-library-vn.wikidot.com"
 		},
 		{
-			"name": "scp-int",
-			"url": "http://scp-int.wikidot.com"
+			"name": "o5-int",
+			"url": "http://o5command-int.wikidot.com"
 		},
 		{
 			"name": "o5-en",
 			"url": "https://05command.wikidot.com"
+		},
+		{
+			"name": "o5-cn",
+			"url": "http://05command-cn.wikidot.com"
+		},
+		{
+			"name": "o5-fr",
+			"url": "http://commandemento5.wikidot.com"
+		},
+		{
+			"name": "o5-pl",
+			"url": "http://dowodztwo.wikidot.com"
+		},
+		{
+			"name": "o5-es",
+			"url": "http://cuarteldelo5.wikidot.com"
+		},
+		{
+			"name": "o5-th",
+			"url": "http://o5command-th.wikidot.com"
+		},
+		{
+			"name": "o5-jp",
+			"url": "http://05command-ja.wikidot.com"
+		},
+		{
+			"name": "o5-de",
+			"url": "http://scp-wiki-de.wikidot.com"
+		},
+		{
+			"name": "o5-pt",
+			"url": "http://comando05ptbr.wikidot.com"
+		},
+		{
+			"name": "o5-cs",
+			"url": "http://o5command-cs.wikidot.com"
+		},
+		{
+			"name": "o5-vn",
+			"url": "http://05command-vn.wikidot.com"
+		},
+		{
+			"name": "o5-el",
+			"url": "http://commado5-el.wikidot.com"
+		},
+		{
+			"name": "scp-int-sandbox",
+			"url": "http://scp-int-sandbox.wikidot.com"
 		},
 		{
 			"name": "scp-sandbox-1",
@@ -118,15 +170,15 @@
 			"url": "https://scp-sandbox-3.wikidot.com"
 		},
 		{
-			"name": "scp-int-sandbox",
-			"url": "http://scp-int-sandbox.wikidot.com"
+			"name": "scpkrsandbox",
+			"url": "http://scpkrsandbox.wikidot.com"
 		},
 		{
 			"name": "backrooms-en",
 			"url": "http://backrooms-wiki.wikidot.com"
 		},
 		{
-			"name": "backrooms-vi",
+			"name": "backrooms-vn",
 			"url": "http://backrooms-vn.wikidot.com"
 		},
 		{
@@ -154,7 +206,7 @@
 			"url": "http://es-backrooms-wiki.wikidot.com"
 		},
 		{
-			"name": "backrooms-ja",
+			"name": "backrooms-jp",
 			"url": "http://japan-backrooms-wiki.wikidot.com"
 		}
 	],
