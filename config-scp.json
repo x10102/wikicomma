@@ -3,15 +3,11 @@
 	"wikis": [
 		{
 			"name": "scp-en",
-			"url": "http://scp-wiki.wikidot.com"
+			"url": "https://scp-wiki.wikidot.com"
 		},
 		{
 			"name": "wl-en",
 			"url": "http://wanderers-library.wikidot.com"
-		},
-		{
-			"name": "scp-en",
-			"url": "http://scp-int.wikidot.com"
 		},
 		{
 			"name": "scp-zh-cn",
@@ -100,6 +96,30 @@
 		{
 			"name": "wl-vi",
 			"url": "http://wanderers-library-vn.wikidot.com"
+		},
+		{
+			"name": "scp-int",
+			"url": "http://scp-int.wikidot.com"
+		},
+		{
+			"name": "o5-en",
+			"url": "https://05command.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-1",
+			"url": "http://scpsandboxwiki.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-2",
+			"url": "http://scpsandbox2.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-3",
+			"url": "https://scp-sandbox-3.wikidot.com"
+		},
+		{
+			"name": "scp-int-sandbox",
+			"url": "http://scp-int-sandbox.wikidot.com"
 		},
 		{
 			"name": "backrooms-en",
