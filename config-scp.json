@@ -1,109 +1,401 @@
 {
-	"base_directory": "/app/storage",
+	"base_directory": "/wikidot",
 	"wikis": [
+		{
+			"name": "scp-int",
+			"url": "http://scp-int.wikidot.com"
+		},
 		{
 			"name": "scp-en",
 			"url": "https://scp-wiki.wikidot.com"
 		},
 		{
-			"name": "scp-ru",
-			"url": "http://scp-ru.wikidot.com/"
+			"name": "wl-en",
+			"url": "http://wanderers-library.wikidot.com"
 		},
 		{
-			"name": "scp-ko",
-			"url": "http://scpko.wikidot.com/"
-		},
-		{
-			"name": "scp-cn",
-			"url": "http://scp-wiki-cn.wikidot.com/"
+			"name": "scp-zh-cn",
+			"url": "http://scp-wiki-cn.wikidot.com"
 		},
 		{
 			"name": "scp-fr",
-			"url": "http://fondationscp.wikidot.com/"
+			"url": "http://fondationscp.wikidot.com"
+		},
+		{
+			"name": "scp-ru",
+			"url": "http://scp-ru.wikidot.com"
 		},
 		{
 			"name": "scp-pl",
-			"url": "http://scp-pl.wikidot.com/"
+			"url": "http://scp-pl.wikidot.com"
 		},
 		{
 			"name": "scp-es",
-			"url": "http://lafundacionscp.wikidot.com/"
-		},
-		{
-			"name": "scp-th",
-			"url": "http://scp-th.wikidot.com/"
+			"url": "http://lafundacionscp.wikidot.com"
 		},
 		{
 			"name": "scp-jp",
-			"url": "http://scp-jp.wikidot.com/"
+			"url": "http://scp-jp.wikidot.com"
+		},
+		{
+			"name": "scp-ko",
+			"url": "http://scpko.wikidot.com"
+		},
+		{
+			"name": "scp-th",
+			"url": "http://scp-th.wikidot.com"
 		},
 		{
 			"name": "scp-de",
-			"url": "http://scp-wiki-de.wikidot.com/"
+			"url": "http://scp-wiki-de.wikidot.com"
 		},
 		{
 			"name": "scp-it",
-			"url": "http://fondazionescp.wikidot.com/"
+			"url": "http://fondazionescp.wikidot.com"
 		},
 		{
-			"name": "scp-ua",
-			"url": "http://scp-ukrainian.wikidot.com/"
+			"name": "scp-uk",
+			"url": "http://scp-ukrainian.wikidot.com"
 		},
 		{
-			"name": "scp-pt-br",
-			"url": "http://scp-pt-br.wikidot.com/"
+			"name": "scp-pt",
+			"url": "http://scp-pt-br.wikidot.com"
 		},
 		{
 			"name": "scp-cs",
-			"url": "http://scp-cs.wikidot.com/"
+			"url": "http://scp-cs.wikidot.com"
 		},
 		{
-			"name": "scp-zh-tr",
-			"url": "http://scp-zh-tr.wikidot.com/"
+			"name": "scp-zh-tw",
+			"url": "http://scp-zh-tr.wikidot.com"
 		},
 		{
 			"name": "scp-vn",
-			"url": "http://scp-vn.wikidot.com/"
+			"url": "http://scp-vn.wikidot.com"
 		},
 		{
 			"name": "scp-el",
-			"url": "http://scp-el.wikidot.com/"
+			"url": "http://scp-el.wikidot.com"
 		},
 		{
 			"name": "scp-id",
-			"url": "http://scp-idn.wikidot.com/"
+			"url": "http://scp-idn.wikidot.com"
 		},
 		{
 			"name": "scp-nd",
-			"url": "http://scp-nd.wikidot.com/"
+			"url": "http://scp-nd.wikidot.com"
 		},
 		{
 			"name": "scp-tr",
-			"url": "http://scpvakfi.wikidot.com/"
+			"url": "http://scpvakfi.wikidot.com"
 		},
 		{
-			"name": "scp-int",
-			"url": "http://scp-int.wikidot.com/"
+			"name": "scp-ar",
+			"url": "http://scp-ar.wikidot.com"
 		},
 		{
-			"name": "wl-en",
-			"url": "http://wanderers-library.wikidot.com/"
+			"name": "scp-cy",
+			"url": "http://scp-cy.wikidot.com"
 		},
 		{
-			"name": "wl-cs",
-			"url": "http://wanderers-library-cs.wikidot.com/"
+			"name": "scp-et",
+			"url": "http://scp-et.wikidot.com"
 		},
 		{
-			"name": "wl-jp",
-			"url": "http://wanderers-library-jp.wikidot.com/"
+			"name": "scp-he",
+			"url": "http://scp-he.wikidot.com"
 		},
 		{
-			"name": "wl-ko",
-			"url": "http://wanderers-library-ko.wikidot.com/"
+			"name": "scp-hu",
+			"url": "http://scp-hu.wikidot.com"
+		},
+		{
+			"name": "scp-jbo",
+			"url": "http://scp-jbo.wikidot.com"
+		},
+		{
+			"name": "scp-nl",
+			"url": "http://scp-nl.wikidot.com"
+		},
+		{
+			"name": "scp-ro",
+			"url": "http://scp-romanian.wikidot.com"
+		},
+		{
+			"name": "scp-sh",
+			"url": "http://scp-sh.wikidot.com"
+		},
+		{
+			"name": "scp-sl",
+			"url": "http://scp-slovenija.wikidot.com"
+		},
+		{
+			"name": "scp-la",
+			"url": "http://scp-la.wikidot.com"
 		},
 		{
 			"name": "wl-pl",
-			"url": "http://wanderers-library-pl.wikidot.com/"
+			"url": "http://wanderers-library-pl.wikidot.com"
+		},
+		{
+			"name": "wl-ja",
+			"url": "http://wanderers-library-jp.wikidot.com"
+		},
+		{
+			"name": "wl-cs",
+			"url": "http://wanderers-library-cs.wikidot.com"
+		},
+		{
+			"name": "wl-ko",
+			"url": "http://wanderers-library-ko.wikidot.com"
+		},
+		{
+			"name": "wl-vi",
+			"url": "http://wanderers-library-vn.wikidot.com"
+		},
+		{
+			"name": "o5-int",
+			"url": "http://o5command-int.wikidot.com"
+		},
+		{
+			"name": "o5-en",
+			"url": "https://05command.wikidot.com"
+		},
+		{
+			"name": "o5-cn",
+			"url": "http://05command-cn.wikidot.com"
+		},
+		{
+			"name": "o5-fr",
+			"url": "http://commandemento5.wikidot.com"
+		},
+		{
+			"name": "o5-pl",
+			"url": "http://dowodztwo.wikidot.com"
+		},
+		{
+			"name": "o5-es",
+			"url": "http://cuarteldelo5.wikidot.com"
+		},
+		{
+			"name": "o5-th",
+			"url": "http://o5command-th.wikidot.com"
+		},
+		{
+			"name": "o5-jp",
+			"url": "http://05command-ja.wikidot.com"
+		},
+		{
+			"name": "o5-de",
+			"url": "http://scp-wiki-de.wikidot.com"
+		},
+		{
+			"name": "o5-pt",
+			"url": "http://comando05ptbr.wikidot.com"
+		},
+		{
+			"name": "o5-cs",
+			"url": "http://o5command-cs.wikidot.com"
+		},
+		{
+			"name": "o5-vn",
+			"url": "http://05command-vn.wikidot.com"
+		},
+		{
+			"name": "o5-el",
+			"url": "http://commado5-el.wikidot.com"
+		},
+		{
+			"name": "o5-nl",
+			"url": "http://o5commissie.wikidot.com"
+		},
+		{
+			"name": "o5-sl",
+			"url": "http://ukaz-o5.wikidot.com"
+		},
+		{
+			"name": "backrooms-en",
+			"url": "http://backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-vn",
+			"url": "http://backrooms-vn.wikidot.com"
+		},
+		{
+			"name": "backrooms-pl",
+			"url": "http://pl-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-cn",
+			"url": "http://backrooms-wiki-cn.wikidot.com"
+		},
+		{
+			"name": "backrooms-fr",
+			"url": "http://fr-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-ru",
+			"url": "http://ru-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-pt",
+			"url": "http://pt-br-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-es",
+			"url": "http://es-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "backrooms-jp",
+			"url": "http://japan-backrooms-wiki.wikidot.com"
+		},
+		{
+			"name": "scp-int-sandbox",
+			"url": "http://scp-int-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-1",
+			"url": "http://scpsandboxwiki.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-2",
+			"url": "http://scpsandbox2.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-3",
+			"url": "https://scp-sandbox-3.wikidot.com"
+		},
+		{
+			"name": "scpkrsandbox",
+			"url": "http://scpkrsandbox.wikidot.com"
+		},
+		{
+			"name": "scpsandboxcn",
+			"url": "http://scpsandboxcn.wikidot.com"
+		},
+		{
+			"name": "sandboxscpfr",
+			"url": "http://sandboxscpfr.wikidot.com"
+		},
+		{
+			"name": "scpsandbox-pl",
+			"url": "http://scpsandbox-pl.wikidot.com"
+		},
+		{
+			"name": "borradores-scp-es",
+			"url": "http://borradores-scp-es.wikidot.com"
+		},
+		{
+			"name": "borradores-scp-es-2",
+			"url": "http://borradores-scp-es-2.wikidot.com"
+		},
+		{
+			"name": "scp-th-sandbox",
+			"url": "http://scp-th-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-jp-sandbox2",
+			"url": "http://scp-jp-sandbox2.wikidot.com"
+		},
+		{
+			"name": "scp-jp-sandbox3",
+			"url": "http://scp-jp-sandbox3.wikidot.com"
+		},
+		{
+			"name": "scp-jp-storage",
+			"url": "http://scp-jp-storage.wikidot.com"
+		},
+		{
+			"name": "scpsandboxde",
+			"url": "http://scpsandboxde.wikidot.com"
+		},
+		{
+			"name": "scpsandboxit",
+			"url": "http://scpsandboxit.wikidot.com"
+		},
+		{
+			"name": "scpsandbox-ua",
+			"url": "http://scpsandbox-ua.wikidot.com"
+		},
+		{
+			"name": "scpsandboxbr",
+			"url": "http://scpsandboxbr.wikidot.com"
+		},
+		{
+			"name": "scp-cs-sandbox",
+			"url": "http://scp-cs-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-cs-sandbox-2",
+			"url": "http://scp-cs-sandbox-2.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-zh",
+			"url": "http://scp-sandbox-zh.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox2-zh",
+			"url": "http://scp-sandbox2-zh.wikidot.com"
+		},
+		{
+			"name": "scpvnsandbox",
+			"url": "http://scpvnsandbox.wikidot.com"
+		},
+		{
+			"name": "sandboxscp-el",
+			"url": "http://sandboxscp-el.wikidot.com"
+		},
+		{
+			"name": "scp-id-sandbox",
+			"url": "http://scp-id-sandbox.wikidot.com"
+		},
+		{
+			"name": "scpvakfisandbox",
+			"url": "http://scpvakfisandbox.wikidot.com"
+		},
+		{
+			"name": "scpsandboxhu",
+			"url": "http://scpsandboxhu.wikidot.com"
+		},
+		{
+			"name": "scpsandboxnl",
+			"url": "http://scpsandboxnl.wikidot.com"
+		},
+		{
+			"name": "scp-sh-sandbox",
+			"url": "http://scp-sh-sandbox.wikidot.com"
+		},
+		{
+			"name": "scp-sandbox-sl",
+			"url": "http://scp-sandbox-sl.wikidot.com"
+		},
+		{
+			"name": "smlt",
+			"url": "http://smlt.wikidot.com"
+		},
+		{
+			"name": "topia",
+			"url": "http://topia.wikidot.com"
+		},
+		{
+			"name": "kaktuskontainer",
+			"url": "http://kaktuskontainer.wikidot.com"
+		},
+		{
+			"name": "scpdsandbox",
+			"url": "http://scpdsandbox.wikidot.com"
+		},
+		{
+			"name": "scptestwiki",
+			"url": "http://scptestwiki.wikidot.com"
+		},
+		{
+			"name": "scpclassic",
+			"url": "http://scpclassic.wikidot.com"
+		},
+		{
+			"name": "scpexplained",
+			"url": "http://scpexplained.wikidot.com"
 		},
 		{
 			"name": "brucebase",
@@ -112,10 +404,11 @@
 	],
 	"ratelimit": {
 		"bucket_size": 60,
-		"refill_seconds": 120
+		"refill_seconds": 60
 	},
-	"delay_ms": 0,
-	"maximum_jobs": 2,
+	"delay_ms": 200,
+	"maximum_jobs": null,
+	"user_list_cache_freshness": 86400,
 	"http_proxy": null,
 	"socks_proxy": null
 }
