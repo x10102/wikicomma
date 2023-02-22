@@ -1723,6 +1723,7 @@ export class WikiDot {
 
 		const matchAuthor = this.matchAndFetchUser(uploader)
 		const matchFileSize = size.textContent.match(WikiDot.fileSizeMatcher)
+		const matchDate = date.querySelector('span.odate')?.attrs['class']?.match(WikiDot.dateMatcher)
 
 		return {
 			file_id: file_id,
@@ -1733,7 +1734,7 @@ export class WikiDot {
 			mime: mime.textContent.trim(),
 			content: contentType.textContent.trim(),
 			author: matchAuthor,
-			stamp: parseInt(date.querySelector('span.odate')?.attrs['class'].match(WikiDot.dateMatcher)![1]!),
+			stamp: parseInt(matchDate !== null && matchDate !== undefined ? matchDate[1] : 'NaN'),
 			internal_version: WikiDot.FILEMETA_VERSION
 		}
 	}
