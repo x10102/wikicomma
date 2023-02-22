@@ -1722,13 +1722,14 @@ export class WikiDot {
 
 
 		const matchAuthor = this.matchAndFetchUser(uploader)
+		const matchFileSize = size.textContent.match(WikiDot.fileSizeMatcher)
 
 		return {
 			file_id: file_id,
 			name: name.textContent.trim(),
 			url: fullURL.querySelector('a')?.attrs['href']!,
 			size: size.textContent.trim(),
-			size_bytes: parseInt(size.textContent.match(WikiDot.fileSizeMatcher)![1]),
+			size_bytes: parseInt(matchFileSize !== null ? matchFileSize[1] : 'NaN'),
 			mime: mime.textContent.trim(),
 			content: contentType.textContent.trim(),
 			author: matchAuthor,
