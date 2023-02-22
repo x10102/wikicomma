@@ -2193,7 +2193,15 @@ export class WikiDot {
 		await this.writeSiteMap(sitemapPages)
 
 		this.log(`Fetching forums list`)
-		const forums = await this.fetchForumCategories()
+
+		let forums: ForumCategory[]
+
+		try {
+			forums = await this.fetchForumCategories()
+		} catch(err) {
+			this.error(`Error while fetching forum list: ${err}, will not try again`)
+			forums = []
+		}
 
 		for (const forum of forums) {
 			const localForum = await this.readForumCategory(forum.id)
