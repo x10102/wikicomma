@@ -253,6 +253,8 @@ export interface ForumThread {
 
 export interface LocalForumThread extends ForumThread {
 	posts: LocalForumPost[]
+	isLocked: boolean
+	version?: number
 }
 
 class DiskMeta<T> {
@@ -442,12 +444,46 @@ export class Lock {
 }
 
 export class WikiDot {
+	private static readonly usernameMatcher = /user:info\/(.*)/
+	private static readonly useridMatcher = /WIKIDOT.page.listeners.userInfo\((\d+)\);/
+
+	// spoon library
+	private static readonly urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
+	public static readonly defaultPagenation = 100
+
+	private readonly pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_files.json`)
+	private readonly pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_pages.json`)
+	private readonly fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this._workingDirectory}/meta/file_map.json`)
+	private readonly pageIdMap: DiskMeta<PageIdMap> = new DiskMeta({}, `${this._workingDirectory}/meta/page_id_map.json`)
+	private readonly pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this._workingDirectory}/meta/pending_revisions.json`)
+
+	private ajaxURL: URL
+
+	private fetchingToken = false
+
+	private tokenInvalidated = false
+	private tokenWaiters: any[] = []
+
+	private readonly downloadingFiles: number[] = []
+
+	private static readonly fileSizeMatcher = /([0-9]+) bytes/i
+	private static readonly FILE_METADATA_VERSION = 1
+
+	private static readonly dateMatcher = /time_([0-9]+)/
+
+	private static readonly localFileMatch = /\/local--files\/(.+)/i
+
+	private static readonly categoryRegExp = /forum\/c-([0-9]+)/
+	private static readonly threadRegExp = /forum\/t-([0-9]+)/
+	private static readonly postRegExp = /post-([0-9]+)/
+	private static readonly fileIdMatcher = /file-row-([0-9]+)/i
+	private static readonly PAGE_METADATA_VERSION = 18
+
+	private static readonly FORUM_THREAD_METADATA_VERSION = 1
+
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
 	}
-
-	private static usernameMatcher = /user:info\/(.*)/
-	private static useridMatcher = /WIKIDOT.page.listeners.userInfo\((\d+)\);/
 
 	private static extractUser(elem: HTMLElement | null): [UserID, string | null] {
 		if (elem == null) {
@@ -495,16 +531,6 @@ export class WikiDot {
 
 		return a
 	}
-
-	// spoon library
-	private static urlMatcher = /(((http|ftp|https):\/{2})+(([0-9a-z_-]+\.)+(aero|asia|biz|cat|com|coop|edu|gov|info|int|jobs|mil|mobi|museum|name|net|org|pro|tel|travel|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cu|cv|cx|cy|cz|cz|de|dj|dk|dm|do|dz|ec|ee|eg|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mn|mn|mo|mp|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|nom|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ra|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|sj|sk|sl|sm|sn|so|sr|st|su|sv|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw|arpa)(:[0-9]+)?((\/([~0-9a-zA-Z\#\+\%@\.\/_-]+))?(\?[0-9a-zA-Z\+\%@\/&\[\];=_-]+)?)?))\b/ig
-	public static defaultPagenation = 100
-
-	private pendingFiles: DiskMeta<number[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_files.json`)
-	private pendingPages: DiskMeta<string[]> = new DiskMeta([], `${this._workingDirectory}/meta/pending_pages.json`)
-	private fileMap: DiskMeta<FileMap> = new DiskMeta({}, `${this._workingDirectory}/meta/file_map.json`)
-	private pageIdMap: DiskMeta<PageIdMap> = new DiskMeta({}, `${this._workingDirectory}/meta/page_id_map.json`)
-	private pendingRevisions: DiskMeta<PendingRevisions> = new DiskMeta({}, `${this._workingDirectory}/meta/pending_revisions.json`)
 
 	private pushPendingFiles(...files: number[]) {
 		for (const value of files) {
@@ -604,8 +630,6 @@ export class WikiDot {
 		return Promise.allSettled(tasks)
 	}
 
-	private ajaxURL: URL
-
 	public get workingDirectory(): string {
 		return this._workingDirectory
 	}
@@ -656,8 +680,6 @@ export class WikiDot {
 			}
 		}
 	}
-
-	private fetchingToken = false
 
 	private log(str: string) {
 		process.stdout.write(`[${this.name}]: ${str}\n`)
@@ -725,9 +747,6 @@ export class WikiDot {
 		return await this.client.post(this.ajaxURL.href, assemble)
 	}
 
-	private tokenInvalidated = false
-	private tokenWaiters: any[] = []
-
 	private async fetchJson(options: any, custom = false, headers?: OutgoingHttpHeaders): Promise<any> {
 		if (this.client === null) {
 			throw new Error(`This object is in offline mode`)
@@ -739,7 +758,7 @@ export class WikiDot {
 
 		const json = JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
 
-		if (!custom && json.status != 'ok') {
+		if (json.status != 'ok') {
 			if (json.status === 'wrong_token7') {
 				const locked = this.tokenInvalidated
 
@@ -763,7 +782,7 @@ export class WikiDot {
 				}
 
 				return await this.fetchJson(options, custom, headers)
-			} else {
+			} else if (!custom) {
 				throw Error(`Server returned ${json.status}, message: ${json.message}`)
 			}
 		}
@@ -772,6 +791,10 @@ export class WikiDot {
 	}
 
 	private async fetchJsonForce(options: any, custom = false, headers?: OutgoingHttpHeaders) {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
 		return JSON.parse((await this.fetch(options, headers)).toString('utf-8'))
 	}
 
@@ -849,8 +872,6 @@ export class WikiDot {
 			}
 		}
 	}
-
-	private static dateMatcher = /time_([0-9]+)/
 
 	public async fetchPageChangeListForce(page_id: number, page = 1, perPage = WikiDot.defaultPagenation, attempts = -1) {
 		let iteration = 0
@@ -1194,8 +1215,6 @@ export class WikiDot {
 		return div != undefined ? div.textContent : ''
 	}
 
-	private static categoryRegExp = /forum\/c-([0-9]+)/
-
 	public async fetchForumCategories() {
 		if (this.client === null) {
 			throw new Error(`This object is in offline mode`)
@@ -1257,8 +1276,6 @@ export class WikiDot {
 		return listing
 	}
 
-	private static threadRegExp = /forum\/t-([0-9]+)/
-
 	public async fetchThreads(category: number, page = 1) {
 		if (this.client === null) {
 			throw new Error(`This object is in offline mode`)
@@ -1316,6 +1333,32 @@ export class WikiDot {
 		return listing
 	}
 
+	public async fetchIsThreadLocked(threadId: number): Promise<boolean> {
+		if (this.client === null) {
+			throw new Error(`This object is in offline mode`)
+		}
+
+		const json = await this.fetchJson({
+			'moduleName': 'forum/sub/ForumNewPostFormModule',
+			'threadId': threadId,
+			'postId': ''
+		}, true)
+
+		const html = parse(json.message)
+		return html.querySelector('a') == null
+	}
+
+	public async fetchIsThreadLockedForce(threadId: number): Promise<boolean> {
+		while (true) {
+			try {
+				return await this.fetchIsThreadLocked(threadId)
+			} catch(err) {
+				this.error(`Encountered ${err} while fetching lock status of thread ${threadId}, sleeping for 5 seconds`)
+				await sleep(5_000)
+			}
+		}
+	}
+
 	public async fetchAllThreads(category: number) {
 		const listing: ForumThread[] = []
 		let page = 0
@@ -1356,8 +1399,6 @@ export class WikiDot {
 
 		return listing
 	}
-
-	private static postRegExp = /post-([0-9]+)/
 
 	private parsePost(postContainer: HTMLElement): ForumPost {
 		let post: HTMLElement | null = null
@@ -1542,10 +1583,6 @@ export class WikiDot {
 		throw lastError
 	}
 
-	// high-level api
-	private downloadingFiles: number[] = []
-	private static localFileMatch = /\/local--files\/(.+)/i
-
 	private static splitFilePath(path: string): [string, string, string] {
 		const firstIndex = path.indexOf('/')
 		let pageName: string
@@ -1659,9 +1696,6 @@ export class WikiDot {
 		return metadata
 	}
 
-	private static fileSizeMatcher = /([0-9]+) bytes/i
-	private static FILEMETA_VERSION = 1
-
 	public async fetchFileMeta(file_id: number): Promise<FileMeta | null> {
 		this.log(`Fetching file meta of ${file_id}`)
 
@@ -1735,7 +1769,7 @@ export class WikiDot {
 			content: contentType.textContent.trim(),
 			author: matchAuthor,
 			stamp: parseInt(matchDate !== null && matchDate !== undefined ? matchDate[1] : 'NaN'),
-			internal_version: WikiDot.FILEMETA_VERSION
+			internal_version: WikiDot.FILE_METADATA_VERSION
 		}
 	}
 
@@ -1749,8 +1783,6 @@ export class WikiDot {
 			}
 		}
 	}
-
-	private static fileIdMatcher = /file-row-([0-9]+)/i
 
 	public async fetchFileList(page_id: number, page: number = 1) {
 		const json = await this.fetchJson({
@@ -1816,7 +1848,7 @@ export class WikiDot {
 			let hit = false
 
 			for (const emeta of existing) {
-				if (emeta.file_id == file_id && emeta.internal_version != undefined && emeta.internal_version >= WikiDot.FILEMETA_VERSION) {
+				if (emeta.file_id == file_id && emeta.internal_version != undefined && emeta.internal_version >= WikiDot.FILE_METADATA_VERSION) {
 					hit = true
 					list2.push(emeta)
 					break
@@ -1837,8 +1869,6 @@ export class WikiDot {
 
 		return list2
 	}
-
-	private static META_VERSION = 18
 
 	public async workLoop(lock: Lock) {
 		if (this.client === null || this.queue === null) {
@@ -2008,7 +2038,7 @@ export class WikiDot {
 					metadata.sitemap_update != pageUpdate.getTime() ||
 					metadata.page_id == undefined ||
 					metadata.version == undefined ||
-					metadata.version < WikiDot.META_VERSION
+					metadata.version < WikiDot.PAGE_METADATA_VERSION
 				) {
 					//this.log(`Need to renew ${pageName} (updated ${pageUpdate == null ? 'always invalid' : pageUpdate} vs ${metadata == null || metadata.sitemap_update == undefined ? 'never' : new Date(metadata.sitemap_update)})`)
 					this.log(`Need to renew ${pageName}`)
@@ -2029,7 +2059,7 @@ export class WikiDot {
 						if (metadata == null || metadata.page_id != -1 && metadata.page_id != pageMeta.page_id) {
 							newMeta = {
 								name: pageName,
-								version: WikiDot.META_VERSION,
+								version: WikiDot.PAGE_METADATA_VERSION,
 								revisions: [],
 								files: [],
 								page_id: pageMeta.page_id,
@@ -2045,7 +2075,7 @@ export class WikiDot {
 						} else {
 							newMeta = {
 								name: pageName,
-								version: WikiDot.META_VERSION,
+								version: WikiDot.PAGE_METADATA_VERSION,
 								revisions: metadata.revisions,
 								files: metadata.files != undefined ? metadata.files : [],
 								page_id: metadata.page_id,
@@ -2255,6 +2285,10 @@ export class WikiDot {
 									shouldFetch = true
 								}
 							}
+
+							if (!shouldFetch) {
+								shouldFetch = localThread.version === undefined || localThread.version < WikiDot.FORUM_THREAD_METADATA_VERSION
+							}
 						}
 
 						// TODO: IF we have meta, and it says that we fetched entire thread
@@ -2277,6 +2311,8 @@ export class WikiDot {
 								startedUser: thread.startedUser,
 								postsNum: thread.postsNum,
 								sticky: thread.sticky,
+								isLocked: await this.fetchIsThreadLockedForce(thread.id),
+								version: WikiDot.FORUM_THREAD_METADATA_VERSION,
 								//posts: localThread != null ? localThread.posts : []
 								posts: []
 							}

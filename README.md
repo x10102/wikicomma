@@ -56,6 +56,7 @@ This piece of software allows you to do incremental backups of next data from yo
 		- Created by whom (as numeric ID if user was deleted)
 		- Amount of posts (as reported by wikidot)
 		- Is sticky
+		- Is locked
 		- Posts
 	- Forum post
 		- Global ID
