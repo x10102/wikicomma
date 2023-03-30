@@ -178,6 +178,7 @@ export interface ForumCategory {
 export interface LocalForumCategory extends ForumCategory {
 	full_scan: boolean
 	last_page: number
+	version?: number
 }
 
 export interface ForumRevisionBody {
@@ -480,6 +481,8 @@ export class WikiDot {
 	private static readonly PAGE_METADATA_VERSION = 18
 
 	private static readonly FORUM_THREAD_METADATA_VERSION = 1
+	// usually needs to be incremented each time FORUM_THREAD_METADATA_VERSION is updated
+	private static readonly FORUM_CATEGORY_METADATA_VERSION = 1
 
 	public static normalizeName(name: string): string {
 		return name.replace(/:/g, '_')
@@ -2236,7 +2239,7 @@ export class WikiDot {
 		for (const forum of forums) {
 			const localForum = await this.readForumCategory(forum.id)
 
-			if (localForum != null && localForum.last == forum.last && localForum.full_scan) {
+			if (localForum != null && localForum.last == forum.last && localForum.full_scan && localForum.version === WikiDot.FORUM_CATEGORY_METADATA_VERSION) {
 				continue
 			}
 
@@ -2474,7 +2477,8 @@ export class WikiDot {
 						threads: forum.threads,
 						lastUser: forum.lastUser,
 						full_scan: true,
-						last_page: 0
+						last_page: 0,
+						version: WikiDot.FORUM_CATEGORY_METADATA_VERSION
 					})
 
 					break
@@ -2488,7 +2492,8 @@ export class WikiDot {
 						threads: forum.threads,
 						lastUser: forum.lastUser,
 						full_scan: full_scan,
-						last_page: page
+						last_page: page,
+						version: WikiDot.FORUM_CATEGORY_METADATA_VERSION
 					})
 				}
 			}
