@@ -1347,6 +1347,8 @@ export class WikiDot {
 			'postId': ''
 		}, true)
 
+		if (json.status === 'ok') return false
+
 		const html = parse(json.message)
 		return html.querySelector('a') == null
 	}
