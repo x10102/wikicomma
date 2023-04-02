@@ -560,12 +560,12 @@ export class HTTPClient {
 					this.handleRequest(value)
 					finished = true
 					clearInterval(timeoutID)
-					response.destroy()
+					// response.destroy()
 				} else {
 					lock.unlock()
 					clearInterval(timeoutID)
 					finished = true
-					response.destroy()
+					// response.destroy()
 					value.reject(new HTTPError(response.statusCode, null, 'Server returned ' + response.statusCode))
 				}
 
