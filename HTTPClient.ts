@@ -354,13 +354,13 @@ export class HTTPClient {
 
 	private httpsagent: https.Agent = new https.Agent({
 		keepAlive: true,
-		keepAliveMsecs: 10000,
+		keepAliveMsecs: 1000,
 		maxSockets: this.connections
 	})
 
 	private httpagent: http.Agent = new http.Agent({
 		keepAlive: true,
-		keepAliveMsecs: 10000,
+		keepAliveMsecs: 1000,
 		maxSockets: this.connections
 	})
 
