@@ -533,6 +533,9 @@ export class HTTPClient {
 			}
 
 			if (response.statusCode == 301 || response.statusCode == 302) {
+				response.on('data', (chunk: Buffer) => {})
+				response.on('end', () => {})
+
 				if (response.headers.location && value.followRedirects) {
 					// redirect, it might also switch protocols
 					value.onStart = () => {}
