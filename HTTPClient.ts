@@ -352,18 +352,6 @@ class ConnectionSlot {
 export class HTTPClient {
 	public cookies = new CookieJar()
 
-	private httpsagent: https.Agent = new https.Agent({
-		keepAlive: true,
-		keepAliveMsecs: 1000,
-		maxSockets: this.connections
-	})
-
-	private httpagent: http.Agent = new http.Agent({
-		keepAlive: true,
-		keepAliveMsecs: 1000,
-		maxSockets: this.connections
-	})
-
 	private socksagent?: http.Agent
 
 	public ratelimit?: RatelimitBucket
@@ -373,10 +361,23 @@ export class HTTPClient {
 
 	constructor(
 		private connections = 8,
+
+		private httpsagent: https.Agent = new https.Agent({
+			keepAlive: true,
+			keepAliveMsecs: 1000,
+			maxSockets: connections
+		}),
+
+		private httpagent: http.Agent = new http.Agent({
+			keepAlive: true,
+			keepAliveMsecs: 1000,
+			maxSockets: connections
+		}),
+
 		private proxyAddress?: string,
 		private proxyPort?: number,
 		proxySocksAddress?: string,
-		proxyPortSocks?: number
+		proxyPortSocks?: number,
 	) {
 		if (proxySocksAddress != undefined && proxyPortSocks != undefined) {
 			const agent = new SocksProxyAgent({

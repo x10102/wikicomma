@@ -28,6 +28,9 @@ import { WikiDotUserList } from "./WikidotUserList"
 import {promises} from 'fs'
 import { PromiseQueue } from "./worker"
 
+import http = require('http')
+import https = require('https')
+
 export interface IDaemonConfig {
 	base_directory: string
 	wikis: {name: string, url: string}[]
@@ -72,9 +75,11 @@ export class DaemonConfig implements IDaemonConfig {
 		}
 	}
 
-	public makeClient(connectionLimit: number) {
+	public makeClient(connectionLimit: number, httpsagent?: https.Agent, httpagent?: http.Agent) {
 		const client = new HTTPClient(
 			connectionLimit,
+			httpsagent,
+			httpagent,
 			this.http_proxy?.address,
 			this.http_proxy?.port,
 			this.socks_proxy?.address,
@@ -89,8 +94,8 @@ export class DaemonConfig implements IDaemonConfig {
 		return client
 	}
 
-	public makeUserList(connectionLimit = 8) {
-		return new WikiDotUserList(this.base_directory + '/_users', this.makeClient(connectionLimit), this.user_list_cache_freshness !== undefined ? this.user_list_cache_freshness * 1000 : undefined)
+	public makeUserList(connectionLimit = 8, httpsagent?: https.Agent, httpagent?: http.Agent) {
+		return new WikiDotUserList(this.base_directory + '/_users', this.makeClient(connectionLimit, httpsagent, httpagent), this.user_list_cache_freshness !== undefined ? this.user_list_cache_freshness * 1000 : undefined)
 	}
 
 	public makeQueue() {

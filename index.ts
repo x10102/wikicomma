@@ -22,25 +22,37 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 
 import { WikiDot, Lock } from './WikiDot'
-import { RatelimitBucket } from './RatelimitBucket'
-import { HTTPClient } from './HTTPClient'
 import { blockingQueue, parallel, PromiseQueue } from './worker'
-import { WikiDotUserList } from './WikidotUserList'
 import { loadConfig } from './DaemonConfig'
+
+import http = require('http')
+import https = require('https')
 
 (async function() {
 	const config = await loadConfig()
 
+	const httpsagent: https.Agent = new https.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 5000,
+		maxSockets: 8
+	})
+
+	const httpagent: http.Agent = new http.Agent({
+		keepAlive: true,
+		keepAliveMsecs: 5000,
+		maxSockets: 8
+	})
+
 	const tasks: any[] = []
 	const lock = new Lock()
-	const userList = config.makeUserList()
+	const userList = config.makeUserList(8, httpsagent, httpagent)
 
 	await userList.initialize()
 
 	for (const {name, url} of config.wikis) {
 		tasks.push(async function() {
 			try {
-				const client = config.makeClient(8)
+				const client = config.makeClient(8, httpsagent, httpagent)
 
 				try {
 					const wiki = new WikiDot(
