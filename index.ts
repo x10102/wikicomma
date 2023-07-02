@@ -81,4 +81,10 @@ import https = require('https')
 	} finally {
 		userList.client.ratelimit?.stopTimer()
 	}
+
+	console.log('Shutting down in 10 seconds.')
+
+	setTimeout(() => {
+		process.exit(0)
+	}, 10_000)
 })()
