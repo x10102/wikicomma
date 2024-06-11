@@ -360,6 +360,12 @@ export class HTTPClient {
 	// watchdog, lastActivity, token
 	private connectionSlotsActivity: ConnectionSlot[] = []
 
+	private headerGenerator = new HeaderGenerator({
+		browserListQuery: 'last 10 versions',
+		devices: ['desktop', 'mobile'],
+		operatingSystems: ['windows', 'macos', 'linux', 'android'],
+	})
+
 	constructor(
 		private connections = 8,
 
@@ -399,12 +405,6 @@ export class HTTPClient {
 		for (let i = 0; i < connections; i++) {
 			this.connectionSlotsActivity.push(new ConnectionSlot((slot) => this.onFree(slot), i))
 		}
-
-		this.headerGenerator = new HeaderGenerator({
-			browserListQuery: 'last 10 versions',
-			devices: ['desktop', 'mobile'],
-			operatingSystems: ['windows', 'macos', 'linux', 'android'],
-		})
 	}
 
 	private waiters: ((slot: ConnectionLock) => any)[] = []
@@ -444,7 +444,7 @@ export class HTTPClient {
 
 		const buildCookie = this.cookies.build(value.url)
 
-		const headers = this.headerGenerator.getHeaders()
+		const fingerprintHeaders = this.headerGenerator.getHeaders()
 		const params: http.RequestOptions = {
 			hostname: value.url.host,
 			port: value.url.port,
@@ -452,7 +452,7 @@ export class HTTPClient {
 			agent: value.agent,
 			method: value.method,
 			headers: {
-				...headers,  // generates User-Agent and other headers to look more realistic
+				...fingerprintHeaders,  // generates User-Agent and other headers to look more realistic
 				'Connection': 'keep-alive',
 				'Accept': '*/*',
 				'Accept-Encoding': 'br, gzip, deflate'
