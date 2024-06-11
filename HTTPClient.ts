@@ -24,6 +24,7 @@
 import http = require('http')
 import https = require('https')
 import urlModule = require('url')
+import {HeaderGenerator} from 'header-generator'
 import {unzip, brotliDecompress, inflate} from 'zlib'
 import {promisify} from 'util'
 import {RatelimitBucket} from './RatelimitBucket'
@@ -398,6 +399,12 @@ export class HTTPClient {
 		for (let i = 0; i < connections; i++) {
 			this.connectionSlotsActivity.push(new ConnectionSlot((slot) => this.onFree(slot), i))
 		}
+
+		this.headerGenerator = new HeaderGenerator({
+			browserListQuery: 'last 10 versions',
+			devices: ['desktop', 'mobile'],
+			operatingSystems: ['windows', 'macos', 'linux', 'android'],
+		})
 	}
 
 	private waiters: ((slot: ConnectionLock) => any)[] = []
@@ -437,6 +444,8 @@ export class HTTPClient {
 
 		const buildCookie = this.cookies.build(value.url)
 
+		const headers = this.headerGenerator.getHeaders()
+
 		const params: http.RequestOptions = {
 			hostname: value.url.host,
 			port: value.url.port,
@@ -444,7 +453,7 @@ export class HTTPClient {
 			agent: value.agent,
 			method: value.method,
 			headers: {
-				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+				...this.headerGenerator.getHeaders(),  // generates User-Agent and other headers to look more realistic
 				'Connection': 'keep-alive',
 				'Accept': '*/*',
 				'Accept-Encoding': 'br, gzip, deflate'
