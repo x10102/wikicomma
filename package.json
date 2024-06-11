@@ -3,6 +3,7 @@
     "@types/html-escaper": "3.0.0",
     "@types/node": "17.0.21",
     "@types/node-7z": "2.1.4",
+    "header-generator": "^2.1.52",
     "html-escaper": "3.0.3",
     "node-7z": "3.0.0",
     "node-html-parser": "5.3.3",
