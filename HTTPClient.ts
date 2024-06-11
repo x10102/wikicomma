@@ -445,7 +445,6 @@ export class HTTPClient {
 		const buildCookie = this.cookies.build(value.url)
 
 		const headers = this.headerGenerator.getHeaders()
-
 		const params: http.RequestOptions = {
 			hostname: value.url.host,
 			port: value.url.port,
@@ -453,7 +452,7 @@ export class HTTPClient {
 			agent: value.agent,
 			method: value.method,
 			headers: {
-				...this.headerGenerator.getHeaders(),  // generates User-Agent and other headers to look more realistic
+				...headers,  // generates User-Agent and other headers to look more realistic
 				'Connection': 'keep-alive',
 				'Accept': '*/*',
 				'Accept-Encoding': 'br, gzip, deflate'
