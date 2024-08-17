@@ -1,3 +1,4 @@
+This is the SCP-CS fork of WikiComma used for our backups. WikiComma's original readme follows:
 
 # WikiComma
 
