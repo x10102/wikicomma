@@ -42,6 +42,7 @@ export interface IDaemonConfig {
 	maximum_jobs?: number
 	http_proxy?: {address: string, port: number}
 	socks_proxy?: {address: string, port: number}
+	blacklist?: string[]
 }
 
 export class DaemonConfig implements IDaemonConfig {
@@ -55,6 +56,7 @@ export class DaemonConfig implements IDaemonConfig {
 	public maximum_jobs?: number
 	public http_proxy?: {address: string, port: number}
 	public socks_proxy?: {address: string, port: number}
+	public blacklist?: string[]
 
 	constructor(loader: IDaemonConfig) {
 		this.base_directory = loader.base_directory
@@ -65,6 +67,7 @@ export class DaemonConfig implements IDaemonConfig {
 		this.maximum_jobs = loader.maximum_jobs
 		this.http_proxy = loader.http_proxy
 		this.socks_proxy = loader.socks_proxy
+		this.blacklist = loader.blacklist
 
 		for (const i in this.wikis) {
 			let url = this.wikis[i].url

@@ -61,7 +61,9 @@ import https = require('https')
 						`${config.base_directory}/${name}`,
 						client,
 						config.makeQueue(),
-						userList
+						userList,
+						true,
+						config.blacklist
 					)
 
 					await wiki.fetchToken()

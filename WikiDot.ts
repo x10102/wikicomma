@@ -644,7 +644,8 @@ export class WikiDot {
 		public client: HTTPClient | null,
 		public queue: PromiseQueue | null,
 		public userList: WikiDotUserList | null,
-		handleCookies = true
+		handleCookies = true,
+		private blacklist: string[] = []
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
@@ -1948,6 +1949,11 @@ export class WikiDot {
 					const lastmod = lastmodElem != null ? new Date(lastmodElem.textContent) : null
 
 					if (loc == undefined) {
+						continue
+					}
+
+					if(this.blacklist.includes(loc)) {
+						this.log(`Removing blacklisted page ${loc} from sitemap...`)
 						continue
 					}
 
