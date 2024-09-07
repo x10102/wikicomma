@@ -1,4 +1,8 @@
-This is the SCP-CS fork of WikiComma used for our backups. WikiComma's original readme follows:
+This is the SCP-CS fork of WikiComma used for our backups. The current (or WIP) extra features include:
+- [X] A `"blacklist"` config field to skip often updated and unimportant pages with huge revision counts (latest revision backed up manually)
+- [ ] A [ZeroMQ](https://zeromq.org/) server that will be used to communicate with [SCUTTLE](https://github.com/scp-cs/translatordb_web) and further automate the backup process
+
+WikiComma's original readme follows:
 
 # WikiComma
 
