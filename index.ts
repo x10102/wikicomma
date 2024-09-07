@@ -27,6 +27,7 @@ import { loadConfig } from './DaemonConfig'
 
 import http = require('http')
 import https = require('https')
+import { ZmqSender } from './ZmqSender'
 
 (async function() {
 	const config = await loadConfig()
@@ -63,7 +64,8 @@ import https = require('https')
 						config.makeQueue(),
 						userList,
 						true,
-						config.blacklist
+						config.blacklist,
+						new ZmqSender(name, "tcp://localhost:3000") //TODO: Load this from config
 					)
 
 					await wiki.fetchToken()
