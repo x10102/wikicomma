@@ -4,19 +4,36 @@ export enum MessageType {
     Handshake,
     Preflight,
     Progress,
-    Error,
+    ErrorFatal,
+    ErrorNonfatal,
     FinishSuccess
+}
+
+export enum Status {
+    BuildingSitemap,
+    PagesMain,
+    ForumsMain,
+    PagesPending,
+    FilesPending,
+    Compressing,
+    FatalError,
+    Other
+}
+
+interface MessageData {
+    total?: number
+    status?: Status
 }
 
 export class ZmqSender {
     private socket: zmq.Push
-    private tag: string
 
     private log(message: string) {
         console.log(`[zmq-${this.tag}]: ${message}`);
     }
 
     private send(message: zmq.MessageLike) {
+        // TODO: Better error handling
         if(this.socket.writable) {
             this.socket.send(message)
         } else {
@@ -24,22 +41,34 @@ export class ZmqSender {
         }
     }
 
-    public sendMessage(type: MessageType, data: Object) {
+    public sendMessage(type: MessageType, data?: MessageData) {
         switch (type) {
-            case MessageType.Handshake:
+            case MessageType.Handshake | MessageType.FinishSuccess:
                 this.send(JSON.stringify({"tag": this.tag, "type": type}))
                 break;
-        
+
+            case MessageType.Preflight:
+                this.send(JSON.stringify({"tag": this.tag, "type": type, "total": data?.total}))
+                break;
+            
+            case MessageType.Progress:
+                this.send(JSON.stringify({"tag": this.tag, "type": type, ...data}))
+                break;
+
             default:
                 this.log("ERROR: Undefined message type")
                 break;
         }
     }
 
-    constructor(tag: string, address: string) {
+    constructor(private tag: string, private address: string) {
         this.socket = new zmq.Push()
-        this.tag = tag
-        this.socket.connect(address)
-        this.log(`Connected to ${address}`)
+    }
+
+    public init() {
+        this.socket.connect(this.address)
+        this.log(`Connected to ${this.address}`)
+        this.log("Sending handshake message")
+        this.sendMessage(MessageType.Handshake)
     }
 }
