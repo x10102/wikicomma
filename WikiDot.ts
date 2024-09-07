@@ -30,6 +30,7 @@ import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 import { blockingQueue, parallel, PromiseQueue } from "./worker"
 import { WikiDotUserList } from "./WikidotUserList"
+import { MessageType, Status, ZmqSender } from "./ZmqSender"
 
 const sleep = promisify(setTimeout)
 
@@ -1883,6 +1884,10 @@ export class WikiDot {
 		}
 
 		await this.initialize()
+		if(this.zmqSender) {
+			this.zmqSender.init()
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.BuildingSitemap})
+		}
 
 		{
 			let mapNeedsRebuild = true
@@ -1993,6 +1998,9 @@ export class WikiDot {
 		}
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Preflight, {total: sitemapPages.length})
+		}
 
 		const oldMap = await this.readSiteMap()
 
@@ -2029,8 +2037,14 @@ export class WikiDot {
 
 		const tasks: any[] = []
 
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.PagesMain})
+		}
+
 		for (const [pageName, pageUpdate] of sitemapPages) {
 			tasks.push(async () => {
+
+				// Check if we already finished the file during a previous run
 				if (oldMap != null) {
 					const oldStamp = oldMap.get(pageName)
 
@@ -2233,6 +2247,10 @@ export class WikiDot {
 		await this.queue.run(worker, 8)
 
 		await this.writeSiteMap(sitemapPages)
+
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.ForumsMain})
+		}
 
 		this.log(`Fetching forums list`)
 
@@ -2514,6 +2532,10 @@ export class WikiDot {
 		// but if we managed to reach the end, then we gonna have fast index!
 		//await this.writeForumMeta(forums)
 
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.FilesPending})
+		}
+
 		if (this.pendingFiles.data.length != 0) {
 			this.log(`Fetching pending files`)
 
@@ -2559,6 +2581,10 @@ export class WikiDot {
 					})
 				}
 			}
+		}
+
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.PagesPending})
 		}
 
 		{
@@ -2647,7 +2673,7 @@ export class WikiDot {
 								delete this.pendingRevisions.data[rev.global_revision]
 								this.pendingRevisions.markDirty()
 							} else {
-								this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
+								this.error(`Encountered ${err}, postponing revision ${rev.global_revision} of ${pageMeta.name} for later fetch (AGAIN)`)
 							}
 						}
 					})
@@ -2658,6 +2684,10 @@ export class WikiDot {
 
 				this.log(`Fetched all pending revisions!`)
 			}
+		}
+
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.Compressing})
 		}
 
 		this.log(`Compressing page revisions`)
