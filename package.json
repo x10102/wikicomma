@@ -8,7 +8,8 @@
     "node-7z": "3.0.0",
     "node-html-parser": "5.3.3",
     "socks-proxy-agent": "^6.2.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "zeromq": "^6.0.4"
   },
   "scripts": {
     "build": "tsc",
