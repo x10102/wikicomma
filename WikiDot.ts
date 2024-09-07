@@ -645,7 +645,8 @@ export class WikiDot {
 		public queue: PromiseQueue | null,
 		public userList: WikiDotUserList | null,
 		handleCookies = true,
-		private blacklist: string[] = []
+		private blacklist: string[] = [],
+		private zmqSender: ZmqSender | null = null
 	) {
 		this.ajaxURL = new URL(`${this.url}/ajax-module-connector.php`)
 		this.startMetaSyncTimer()
