@@ -2059,7 +2059,7 @@ export class WikiDot {
 					try {
 						pageMeta = await this.fetchGeneric(pageName)
 					} catch(err) {
-						this.log(`Encountered ${err}, postproning page ${pageName} for late fetch`)
+						this.log(`Encountered ${err}, postponing page ${pageName} for late fetch`)
 						this.pushPendingPages(pageName)
 						return
 					}
@@ -2209,7 +2209,7 @@ export class WikiDot {
 
 								break
 							} catch(err) {
-								this.error(`Encountered ${err}, postproning revision ${rev.global_revision} of ${pageName} for later fetch`)
+								this.error(`Encountered ${err}, postponing revision ${rev.global_revision} of ${pageName} for later fetch`)
 								this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
 								this.pendingRevisions.markDirty()
 							}
