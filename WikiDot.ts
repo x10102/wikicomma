@@ -30,7 +30,7 @@ import { addZipFiles, listZipFiles } from "./7z-helper"
 import { OutgoingHttpHeaders } from "http2"
 import { blockingQueue, parallel, PromiseQueue } from "./worker"
 import { WikiDotUserList } from "./WikidotUserList"
-import { MessageType, Status, ZmqSender } from "./ZmqSender"
+import { MessageType, Status, ZmqSender, ErrorKind, MessageData } from "./ZmqSender"
 
 const sleep = promisify(setTimeout)
 
@@ -149,21 +149,6 @@ export function removeFromSet<T>(set: T[], value: T) {
 	}
 
 	return indexOf != -1
-}
-
-export function flipArray<T>(input: T[]): T[] {
-	let i = 0
-	let j = input.length - 1
-
-	while (i < j) {
-		const value = input[j]
-		input[j] = input[i]
-		input[i] = value
-		i++
-		j--
-	}
-
-	return input
 }
 
 export interface ForumCategory {
@@ -771,6 +756,7 @@ export class WikiDot {
 				if (!locked) {
 					this.tokenInvalidated = true
 					this.error(`!!! Wikidot invalidated our token, waiting 30 seconds....`)
+					this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorTokenInvalidated})
 					await sleep(30_000)
 
 					this.client.cookies.removeSpecific(this.ajaxURL, 'wikidot_token7')
@@ -1878,16 +1864,24 @@ export class WikiDot {
 		return list2
 	}
 
+	private zmqNotify(type: MessageType, data?: MessageData) {
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(type, data)
+		}
+	}
+
 	public async workLoop(lock: Lock) {
+		if(this.zmqSender) {
+			this.zmqSender.init()
+		}
+
 		if (this.client === null || this.queue === null) {
+			this.zmqNotify(MessageType.ErrorFatal, {errorKind: ErrorKind.ErrorClientOffline})
 			throw new Error(`This object is in offline mode`)
 		}
 
 		await this.initialize()
-		if(this.zmqSender) {
-			this.zmqSender.init()
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.BuildingSitemap})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.BuildingSitemap})
 
 		{
 			let mapNeedsRebuild = true
@@ -1919,6 +1913,7 @@ export class WikiDot {
 								this.pageIdMap.data[metadata.page_id] = metadata.name
 								this.pageIdMap.markDirty()
 							} else {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind:ErrorKind.ErrorMalformedSitemap})
 								this.error(`${this._workingDirectory}/meta/pages/${name} is malformed!`)
 							}
 						})
@@ -1998,9 +1993,7 @@ export class WikiDot {
 		}
 
 		this.log(`Counting total ${sitemapPages.length} pages`)
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Preflight, {total: sitemapPages.length})
-		}
+		this.zmqNotify(MessageType.Preflight, {total: sitemapPages.length})
 
 		const oldMap = await this.readSiteMap()
 
@@ -2035,11 +2028,9 @@ export class WikiDot {
 			}
 		}
 
-		const tasks: any[] = []
 
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.PagesMain})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.PagesMain})
+		const tasks: any[] = []
 
 		for (const [pageName, pageUpdate] of sitemapPages) {
 			tasks.push(async () => {
@@ -2050,6 +2041,9 @@ export class WikiDot {
 
 					if (oldStamp === pageUpdate || pageUpdate != null && oldStamp === pageUpdate.getTime()) {
 						if (await this.pageMetadataExists(pageName)) {
+							if(this.zmqSender) {
+								this.zmqSender.sendMessage(MessageType.PageDone, {name: pageName})
+							}
 							// consider it fetched, since sitemap is written to disk only when everything got saved
 							return
 						}
@@ -2074,6 +2068,7 @@ export class WikiDot {
 					try {
 						pageMeta = await this.fetchGeneric(pageName)
 					} catch(err) {
+						this.zmqNotify(MessageType.PagePostponed, {name: pageName})
 						this.log(`Encountered ${err}, postponing page ${pageName} for late fetch`)
 						this.pushPendingPages(pageName)
 						return
@@ -2129,6 +2124,7 @@ export class WikiDot {
 								newMeta.votings = await this.fetchPageVoters(pageMeta.page_id)
 								break
 							} catch(err) {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorVoteFetch, name: pageName})
 								this.error(`Encountered error fetching ${pageName} voters: ${err}`)
 							}
 						}
@@ -2154,6 +2150,7 @@ export class WikiDot {
 											this.log(`File ${emeta.file_id} <${emeta.url}> inside ${pageName} <${pageMeta.page_id}> got removed`)
 											await promises.unlink(`${this._workingDirectory}/files/${pageName}/${emeta.file_id}`)
 										} catch(err) {
+											this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorFileUnlink, name: pageName})
 											this.error(String(err))
 										}
 									}
@@ -2161,6 +2158,7 @@ export class WikiDot {
 
 								break
 							} catch(err) {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorFileFetch, name: pageName})
 								this.error(`Encountered error fetching ${pageName} files: ${err}`)
 							}
 						}
@@ -2170,6 +2168,7 @@ export class WikiDot {
 								newMeta.is_locked = await this.fetchIsPageLocked(pageMeta.page_id)
 								break
 							} catch(err) {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorLockStatusFetch, name: pageName})
 								this.error(`Encountered error fetching ${pageName} "is locked" status: ${err}`)
 							}
 						}
@@ -2199,7 +2198,7 @@ export class WikiDot {
 				}
 
 				let changes = false
-				flipArray(revisionsToFetch)
+				revisionsToFetch.reverse()
 
 				const worker = async () => {
 					while (true) {
@@ -2224,6 +2223,7 @@ export class WikiDot {
 
 								break
 							} catch(err) {
+								this.zmqNotify(MessageType.PagePostponed, {name: pageName})
 								this.error(`Encountered ${err}, postponing revision ${rev.global_revision} of ${pageName} for later fetch`)
 								this.pendingRevisions.data[rev.global_revision] = metadata!.page_id
 								this.pendingRevisions.markDirty()
@@ -2240,6 +2240,7 @@ export class WikiDot {
 				if (changes) {
 					await this.compressRevisions(WikiDot.normalizeName(pageName))
 				}
+				this.zmqNotify(MessageType.PageDone, {name: pageName})
 			})
 		}
 
@@ -2248,9 +2249,7 @@ export class WikiDot {
 
 		await this.writeSiteMap(sitemapPages)
 
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.ForumsMain})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.ForumsMain})
 
 		this.log(`Fetching forums list`)
 
@@ -2259,6 +2258,7 @@ export class WikiDot {
 		try {
 			forums = await this.fetchForumCategories()
 		} catch(err) {
+			this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorForumListFetch})
 			this.error(`Error while fetching forum list: ${err}, will not try again`)
 			forums = []
 		}
@@ -2304,6 +2304,7 @@ export class WikiDot {
 							shouldFetch = count != thread.postsNum
 
 							if (shouldFetch) {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorForumCountMismatch})
 								this.error(`Post amount mismatch of ${thread.id} (expected ${thread.postsNum}, got ${count})`)
 							}
 
@@ -2311,6 +2312,7 @@ export class WikiDot {
 								localPostsAndRevisions = await this.readPostsAndRevisionsOfThread(forum.id, thread.id)
 
 								if (localPostsAndRevisions[0].length != count) {
+									this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorForumCountMismatch})
 									this.error(`Fetched post count mismatch of ${thread.id} (expected ${count}, got ${localPostsAndRevisions[0].length})`)
 									shouldFetch = true
 								}
@@ -2407,7 +2409,9 @@ export class WikiDot {
 											} catch(err) {
 												if (err instanceof HTTPError && err.response === 500) {
 													// slurp it, wikidot is hopeless
+													this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorWikidotInternal})
 												} else {
+													this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorForumPostFetch})
 													throw new Error(`Fetching revision ${revision.id} of post ${post.id}: ${err}`)
 												}
 											}
@@ -2532,9 +2536,7 @@ export class WikiDot {
 		// but if we managed to reach the end, then we gonna have fast index!
 		//await this.writeForumMeta(forums)
 
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.FilesPending})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.FilesPending})
 
 		if (this.pendingFiles.data.length != 0) {
 			this.log(`Fetching pending files`)
@@ -2559,6 +2561,7 @@ export class WikiDot {
 				}
 
 				if (mapped == undefined) {
+					this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorFileMetaFetch})
 					this.log(`Failed to map file meta ${id}`)
 					continue
 				}
@@ -2583,9 +2586,7 @@ export class WikiDot {
 			}
 		}
 
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.PagesPending})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.PagesPending})
 
 		{
 			const copy: [number, number][] = []
@@ -2612,6 +2613,7 @@ export class WikiDot {
 
 							if (metadata != null) {
 								if (metadata.page_id != num) {
+									this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorWhatTheFuck})
 									this.error(`yo dude what the fuck`)
 									this.error(`Page map match ID ${num} against ${page_name}, but ${page_name} in pages/ has ID of ${metadata.page_id}`)
 									this.pageIdMap.data[metadata.page_id] = metadata.name
@@ -2628,6 +2630,7 @@ export class WikiDot {
 					}
 
 					if (!hit) {
+						this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorMetaMissing})
 						this.error(`Unable to find page metadata for ${page_id}!!!`)
 					}
 				}
@@ -2639,6 +2642,7 @@ export class WikiDot {
 						const pageMeta = mapping.get(page_id)
 
 						if (pageMeta == undefined) {
+							this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorGivingUp})
 							this.error(`Unknown page with id ${page_id} when resolving pending revision! Considering revision ${global_revision} unresolvable.`)
 							delete this.pendingRevisions.data[global_revision]
 							this.pendingRevisions.markDirty()
@@ -2655,6 +2659,7 @@ export class WikiDot {
 						}
 
 						if (rev == undefined) {
+							this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorGivingUp})
 							this.error(`Unknown revision with id ${global_revision} inside ${pageMeta.name} (${[pageMeta.page_id]}) when resolving pending revision! Considering revision unresolvable.`)
 							delete this.pendingRevisions.data[global_revision]
 							this.pendingRevisions.markDirty()
@@ -2662,6 +2667,7 @@ export class WikiDot {
 						}
 
 						try {
+							this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorGivingUp})
 							this.log(`Fetching revision ${rev.revision} (${rev.global_revision}) of ${pageMeta.name}`)
 							const body = await this.fetchRevision(rev.global_revision)
 							await this.writeRevision(pageMeta.name, rev.revision, body)
@@ -2669,6 +2675,7 @@ export class WikiDot {
 							this.pendingRevisions.markDirty()
 						} catch(err) {
 							if (pageMeta.name.startsWith('nav:') || pageMeta.name.startsWith('tech:')) {
+								this.zmqNotify(MessageType.ErrorNonfatal, {errorKind: ErrorKind.ErrorGivingUp})
 								this.error(`Encountered ${err}, giving up on ${rev.global_revision} of ${pageMeta.name}`)
 								delete this.pendingRevisions.data[rev.global_revision]
 								this.pendingRevisions.markDirty()
@@ -2686,9 +2693,7 @@ export class WikiDot {
 			}
 		}
 
-		if(this.zmqSender) {
-			this.zmqSender.sendMessage(MessageType.Progress, {status: Status.Compressing})
-		}
+		this.zmqNotify(MessageType.Progress, {status: Status.Compressing})
 
 		this.log(`Compressing page revisions`)
 
@@ -2722,6 +2727,10 @@ export class WikiDot {
 					}
 				}
 			}
+		}
+
+		if(this.zmqSender) {
+			this.zmqSender.sendMessage(MessageType.FinishSuccess)
 		}
 	}
 

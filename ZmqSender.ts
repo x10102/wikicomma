@@ -6,7 +6,9 @@ export enum MessageType {
     Progress,
     ErrorFatal,
     ErrorNonfatal,
-    FinishSuccess
+    FinishSuccess,
+    PageDone,
+    PagePostponed
 }
 
 export enum Status {
@@ -20,9 +22,31 @@ export enum Status {
     Other
 }
 
-interface MessageData {
+export enum ErrorKind {
+    ErrorClientOffline,
+    ErrorMalformedSitemap,
+    ErrorVoteFetch,
+    ErrorFileFetch,
+    ErrorLockStatusFetch,
+    ErrorForumListFetch,
+    ErrorForumPostFetch,
+    ErrorFileMetaFetch,
+    ErrorFileUnlink,
+    ErrorForumCountMismatch,
+    ErrorWikidotInternal,
+    ErrorWhatTheFuck,
+    ErrorMetaMissing,
+    ErrorGivingUp,
+    ErrorTokenInvalidated
+}
+
+
+export interface MessageData {
     total?: number
     status?: Status
+    name?: string
+    errorKind?: ErrorKind
+    errorStr?: string
 }
 
 export class ZmqSender {
@@ -43,7 +67,10 @@ export class ZmqSender {
 
     public sendMessage(type: MessageType, data?: MessageData) {
         switch (type) {
-            case MessageType.Handshake | MessageType.FinishSuccess:
+            case MessageType.Handshake:
+            case MessageType.FinishSuccess:
+            case MessageType.PageDone:
+            case MessageType.PagePostponed:
                 this.send(JSON.stringify({"tag": this.tag, "type": type}))
                 break;
 
@@ -52,6 +79,8 @@ export class ZmqSender {
                 break;
             
             case MessageType.Progress:
+            case MessageType.ErrorFatal:
+            case MessageType.ErrorNonfatal:
                 this.send(JSON.stringify({"tag": this.tag, "type": type, ...data}))
                 break;
 
