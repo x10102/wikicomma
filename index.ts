@@ -65,7 +65,7 @@ import { ZmqSender } from './ZmqSender'
 						userList,
 						true,
 						config.blacklist,
-						new ZmqSender(name, "tcp://localhost:3000") //TODO: Load this from config
+						new ZmqSender(name, "tcp://localhost:3033") //TODO: Load this from config
 					)
 
 					await wiki.fetchToken()
