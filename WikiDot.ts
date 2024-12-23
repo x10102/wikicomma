@@ -2253,7 +2253,7 @@ export class WikiDot {
 		const interval_id = setInterval(() => {
 			console.log(`[${this.name}] - ${tasks.length} remaining`)
 			this.zmqNotify(MessageType.Progress, {status: Status.PagesMain, done: done, postponed: postponed})
-		}, 500);
+		}, 2000 + Math.random() * 100);
 
 		await this.queue.run(worker, 8)
 
