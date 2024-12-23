@@ -1,3 +1,5 @@
 node_modules/
 *.js
 *.json
+-package.json
+-package-lock.json
