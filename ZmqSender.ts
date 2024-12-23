@@ -43,6 +43,8 @@ export enum ErrorKind {
 
 export interface MessageData {
     total?: number
+    postponed?: number
+    done?: number
     status?: Status
     name?: string
     errorKind?: ErrorKind

@@ -2031,6 +2031,9 @@ export class WikiDot {
 
 		this.zmqNotify(MessageType.Progress, {status: Status.PagesMain})
 		const tasks: any[] = []
+		
+		let done = 0
+		let postponed = 0
 
 		for (const [pageName, pageUpdate] of sitemapPages) {
 			tasks.push(async () => {
@@ -2042,7 +2045,7 @@ export class WikiDot {
 					if (oldStamp === pageUpdate || pageUpdate != null && oldStamp === pageUpdate.getTime()) {
 						if (await this.pageMetadataExists(pageName)) {
 							if(this.zmqSender) {
-								this.zmqSender.sendMessage(MessageType.PageDone, {name: pageName})
+								done++
 							}
 							// consider it fetched, since sitemap is written to disk only when everything got saved
 							return
@@ -2068,7 +2071,7 @@ export class WikiDot {
 					try {
 						pageMeta = await this.fetchGeneric(pageName)
 					} catch(err) {
-						this.zmqNotify(MessageType.PagePostponed, {name: pageName})
+						postponed++
 						this.log(`Encountered ${err}, postponing page ${pageName} for late fetch`)
 						this.pushPendingPages(pageName)
 						return
@@ -2240,14 +2243,23 @@ export class WikiDot {
 				if (changes) {
 					await this.compressRevisions(WikiDot.normalizeName(pageName))
 				}
-				this.zmqNotify(MessageType.PageDone, {name: pageName})
+				//this.zmqNotify(MessageType.PageDone, {name: pageName})
+				done++
 			})
 		}
 
 		const worker = this.queue.blockingQueue(tasks)
+
+		const interval_id = setInterval(() => {
+			console.log(`[${this.name}] - ${tasks.length} remaining`)
+			this.zmqNotify(MessageType.Progress, {status: Status.PagesMain, done: done, postponed: postponed})
+		}, 500);
+
 		await this.queue.run(worker, 8)
 
 		await this.writeSiteMap(sitemapPages)
+
+		clearInterval(interval_id); // Stop reporting on page progress
 
 		this.zmqNotify(MessageType.Progress, {status: Status.ForumsMain})
 
